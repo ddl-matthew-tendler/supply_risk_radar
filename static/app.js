@@ -1,6 +1,82 @@
 // SupplyRiskRadar — Main App
 'use strict';
 
+// ── Debug instrumentation (runs before anything else) ─────────────────────────
+var __debug = (function() {
+  var MAX_ENTRIES = 200;
+  var logs = [];
+  var netReqs = [];
+  var listeners = [];
+
+  function notify() { listeners.forEach(function(fn) { fn(); }); }
+
+  function addLog(level, args) {
+    var msg;
+    try { msg = Array.from(args).map(function(a) { return typeof a === 'object' ? JSON.stringify(a, null, 0) : String(a); }).join(' '); } catch(e) { msg = String(args[0]); }
+    logs.push({ ts: new Date().toISOString().slice(11, 23), level: level, msg: msg });
+    if (logs.length > MAX_ENTRIES) logs.shift();
+    notify();
+  }
+
+  // Intercept console
+  var _log = console.log.bind(console);
+  var _warn = console.warn.bind(console);
+  var _err = console.error.bind(console);
+  var _info = console.info.bind(console);
+  console.log   = function() { _log.apply(console, arguments);  addLog('log',   arguments); };
+  console.warn  = function() { _warn.apply(console, arguments); addLog('warn',  arguments); };
+  console.error = function() { _err.apply(console, arguments);  addLog('error', arguments); };
+  console.info  = function() { _info.apply(console, arguments); addLog('info',  arguments); };
+  window.addEventListener('error', function(e) { addLog('error', ['\u274C ' + e.message + ' (' + (e.filename || '').split('/').pop() + ':' + e.lineno + ')']); });
+  window.addEventListener('unhandledrejection', function(e) { addLog('error', ['\u274C Unhandled rejection: ' + (e.reason && e.reason.message ? e.reason.message : String(e.reason))]); });
+
+  // Intercept fetch
+  var _fetch = window.fetch;
+  window.fetch = function(url, opts) {
+    var method = (opts && opts.method) || 'GET';
+    var entry = { ts: new Date().toISOString().slice(11, 23), method: method, url: String(url), status: '…', duration: null };
+    var t0 = Date.now();
+    netReqs.push(entry);
+    if (netReqs.length > MAX_ENTRIES) netReqs.shift();
+    notify();
+    return _fetch.apply(window, arguments).then(function(resp) {
+      entry.status = resp.status;
+      entry.duration = Date.now() - t0;
+      notify();
+      return resp;
+    }, function(err) {
+      entry.status = 'ERR';
+      entry.duration = Date.now() - t0;
+      notify();
+      throw err;
+    });
+  };
+
+  function getGlobals() {
+    return [
+      { name: 'React',      ok: typeof React !== 'undefined',          val: typeof React !== 'undefined' ? 'v' + (React.version || '?') : 'missing' },
+      { name: 'ReactDOM',   ok: typeof ReactDOM !== 'undefined',       val: typeof ReactDOM !== 'undefined' ? 'loaded' : 'missing' },
+      { name: 'antd',       ok: typeof antd !== 'undefined',           val: typeof antd !== 'undefined' ? Object.keys(antd).length + ' exports' : 'missing' },
+      { name: 'dayjs',      ok: typeof dayjs !== 'undefined',          val: typeof dayjs !== 'undefined' ? dayjs().format('HH:mm') : 'missing' },
+      { name: 'Leaflet',    ok: typeof L !== 'undefined',              val: typeof L !== 'undefined' ? 'v' + (L.version || '?') : 'missing' },
+      { name: 'MOCK_SUPPLIERS',      ok: typeof MOCK_SUPPLIERS !== 'undefined',      val: typeof MOCK_SUPPLIERS !== 'undefined' ? MOCK_SUPPLIERS.length + ' records' : 'missing' },
+      { name: 'MOCK_WATCHLIST',      ok: typeof MOCK_WATCHLIST !== 'undefined',      val: typeof MOCK_WATCHLIST !== 'undefined' ? MOCK_WATCHLIST.length + ' records' : 'missing' },
+      { name: 'MOCK_ALERTS',         ok: typeof MOCK_ALERTS !== 'undefined',         val: typeof MOCK_ALERTS !== 'undefined' ? MOCK_ALERTS.length + ' records' : 'missing' },
+      { name: 'MOCK_TARIFF_SCENARIOS', ok: typeof MOCK_TARIFF_SCENARIOS !== 'undefined', val: typeof MOCK_TARIFF_SCENARIOS !== 'undefined' ? MOCK_TARIFF_SCENARIOS.length + ' records' : 'missing' },
+      { name: 'MOCK_EXEC_BRIEF',     ok: typeof MOCK_EXEC_BRIEF !== 'undefined',     val: typeof MOCK_EXEC_BRIEF !== 'undefined' ? 'loaded' : 'missing' },
+    ];
+  }
+
+  return {
+    getLogs: function() { return logs.slice(); },
+    getNetReqs: function() { return netReqs.slice(); },
+    getGlobals: getGlobals,
+    clearLogs: function() { logs = []; notify(); },
+    clearNet: function() { netReqs = []; notify(); },
+    subscribe: function(fn) { listeners.push(fn); return function() { listeners = listeners.filter(function(l) { return l !== fn; }); }; },
+  };
+}());
+
 var _antd = antd;
 var ConfigProvider = _antd.ConfigProvider;
 var Tabs = _antd.Tabs;
@@ -766,6 +842,213 @@ function ExecBriefTab(props) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
+// DEBUG PANEL
+// ════════════════════════════════════════════════════════════════════════════════
+function DebugPanel(props) {
+  var appState = props.appState;
+  var _open = useState(false); var open = _open[0]; var setOpen = _open[1];
+  var _tab = useState('logs'); var tab = _tab[0]; var setTab = _tab[1];
+  var _tick = useState(0); var setTick = _tick[1];
+  var _logs = useState([]); var logs = _logs[0]; var setLogs = _logs[1];
+  var _net = useState([]); var netReqs = _net[0]; var setNetReqs = _net[1];
+  var logEndRef = useRef(null);
+
+  // Subscribe to debug updates
+  useEffect(function() {
+    var unsub = __debug.subscribe(function() {
+      setLogs(__debug.getLogs());
+      setNetReqs(__debug.getNetReqs());
+      setTick(function(t) { return t + 1; });
+    });
+    setLogs(__debug.getLogs());
+    setNetReqs(__debug.getNetReqs());
+    return unsub;
+  }, []);
+
+  // Ctrl+Shift+D toggles panel
+  useEffect(function() {
+    function onKey(e) {
+      if (e.ctrlKey && e.shiftKey && e.key === 'D') { e.preventDefault(); setOpen(function(o) { return !o; }); }
+    }
+    window.addEventListener('keydown', onKey);
+    return function() { window.removeEventListener('keydown', onKey); };
+  }, []);
+
+  // Auto-scroll logs
+  useEffect(function() {
+    if (open && tab === 'logs' && logEndRef.current) {
+      logEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [logs, open, tab]);
+
+  var globals = __debug.getGlobals();
+  var auditLog = [];
+  try { auditLog = JSON.parse(localStorage.getItem('srr_audit_log') || '[]'); } catch(e) {}
+
+  var logColor = { log: '#A8C4E0', info: '#80D4B0', warn: '#FFD080', error: '#FF8080' };
+
+  var panelStyle = {
+    position: 'fixed', bottom: 0, right: 0, width: open ? 620 : 'auto',
+    height: open ? 400 : 'auto', zIndex: 9999,
+    background: open ? '#1A1A2E' : 'transparent',
+    border: open ? '1px solid #3A3A5A' : 'none',
+    borderRadius: open ? '8px 0 0 0' : 0,
+    boxShadow: open ? '0 -4px 24px rgba(0,0,0,0.4)' : 'none',
+    fontFamily: "'Courier New', monospace",
+    display: 'flex', flexDirection: 'column',
+    overflow: 'hidden',
+  };
+
+  var triggerStyle = {
+    position: 'fixed', bottom: 8, right: 8, zIndex: 9999,
+    background: '#1A1A2E', border: '1px solid #543FDE', borderRadius: 6,
+    padding: '4px 10px', fontSize: 11, color: '#7A6EF0', cursor: 'pointer',
+    fontFamily: "'Courier New', monospace", userSelect: 'none',
+    boxShadow: '0 2px 8px rgba(84,63,222,0.3)',
+  };
+
+  if (!open) {
+    return h('div', { style: triggerStyle, onClick: function() { setOpen(true); }, title: 'Open Debug Panel (Ctrl+Shift+D)' },
+      '⬡ DBG ' + (logs.filter(function(l){return l.level==='error';}).length > 0 ? '🔴' + logs.filter(function(l){return l.level==='error';}).length : '✓')
+    );
+  }
+
+  var tabBtnStyle = function(t) { return {
+    padding: '4px 12px', fontSize: 11, cursor: 'pointer', border: 'none',
+    background: tab === t ? '#543FDE' : 'transparent',
+    color: tab === t ? '#fff' : '#8080A0',
+    borderRadius: 4, fontFamily: "'Courier New', monospace",
+  }; };
+
+  return h('div', { style: panelStyle },
+    // Header bar
+    h('div', { style: { background: '#0D0D1A', padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid #2A2A4A', flexShrink: 0 } },
+      h('span', { style: { color: '#7A6EF0', fontWeight: 700, fontSize: 12 } }, '⬡ SupplyRiskRadar Debug'),
+      h('span', { style: { fontSize: 10, color: '#4A4A6A', marginLeft: 4 } }, 'Ctrl+Shift+D'),
+      h('button', { style: tabBtnStyle('globals'), onClick: function() { setTab('globals'); } }, 'Globals'),
+      h('button', { style: tabBtnStyle('logs'), onClick: function() { setTab('logs'); } }, 'Console (' + logs.length + ')'),
+      h('button', { style: tabBtnStyle('network'), onClick: function() { setTab('network'); } }, 'Network (' + netReqs.length + ')'),
+      h('button', { style: tabBtnStyle('state'), onClick: function() { setTab('state'); } }, 'App State'),
+      h('button', { style: tabBtnStyle('audit'), onClick: function() { setTab('audit'); } }, 'Audit (' + auditLog.length + ')'),
+      h('div', { style: { flex: 1 } }),
+      logs.filter(function(l){return l.level==='error';}).length > 0
+        ? h('span', { style: { fontSize: 10, color: '#FF8080', marginRight: 8 } }, '🔴 ' + logs.filter(function(l){return l.level==='error';}).length + ' errors')
+        : h('span', { style: { fontSize: 10, color: '#80D4B0', marginRight: 8 } }, '✓ no errors'),
+      h('button', { style: { background: 'transparent', border: 'none', color: '#8080A0', cursor: 'pointer', fontSize: 14, padding: '0 4px' }, onClick: function() { setOpen(false); } }, '✕')
+    ),
+
+    // Content
+    h('div', { style: { flex: 1, overflow: 'auto', padding: 8 } },
+
+      // GLOBALS TAB
+      tab === 'globals' ? h('div', null,
+        h('div', { style: { color: '#4A6A8A', fontSize: 10, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 } }, 'Library & Mock Data Status'),
+        globals.map(function(g) {
+          return h('div', { key: g.name, style: { display: 'flex', gap: 8, padding: '3px 0', borderBottom: '1px solid #1E1E3A', fontSize: 11 } },
+            h('span', { style: { color: g.ok ? '#80D4B0' : '#FF8080', width: 16 } }, g.ok ? '✓' : '✗'),
+            h('span', { style: { color: '#A0A0C0', width: 200 } }, g.name),
+            h('span', { style: { color: g.ok ? '#C0D4E0' : '#FF6060' } }, g.val)
+          );
+        }),
+        h('div', { style: { marginTop: 12, color: '#4A6A8A', fontSize: 10, textTransform: 'uppercase', letterSpacing: 1 } }, 'Environment'),
+        h('div', { style: { fontSize: 11, color: '#A0A0C0', marginTop: 4, lineHeight: 1.7 } },
+          h('div', null, 'User Agent: ' + navigator.userAgent.slice(0, 80)),
+          h('div', null, 'Origin: ' + window.location.origin),
+          h('div', null, 'Page load: ' + (window.performance ? Math.round(window.performance.now()) + 'ms' : 'n/a')),
+          h('div', null, 'localStorage entries: ' + localStorage.length),
+          h('div', null, 'antd UMD binding: ' + (typeof antd !== 'undefined' ? 'OK (dynamic load)' : 'FAILED'))
+        )
+      ) : null,
+
+      // LOGS TAB
+      tab === 'logs' ? h('div', null,
+        h('div', { style: { display: 'flex', gap: 6, marginBottom: 6 } },
+          h('button', { style: { background: '#2A1A1A', border: '1px solid #4A2A2A', color: '#FF8080', borderRadius: 3, padding: '2px 8px', fontSize: 10, cursor: 'pointer' }, onClick: function() { __debug.clearLogs(); } }, 'Clear'),
+          h('span', { style: { fontSize: 10, color: '#4A4A6A', alignSelf: 'center' } }, logs.length + ' entries · scroll to bottom for latest')
+        ),
+        logs.length === 0
+          ? h('div', { style: { color: '#4A4A6A', fontSize: 11, padding: 8 } }, 'No console output yet.')
+          : logs.map(function(entry, i) {
+            return h('div', { key: i, style: { display: 'flex', gap: 6, padding: '2px 0', borderBottom: '1px solid #1A1A2E', fontSize: 11, lineHeight: 1.4 } },
+              h('span', { style: { color: '#4A4A6A', flexShrink: 0, width: 82 } }, entry.ts),
+              h('span', { style: { color: logColor[entry.level] || '#A0A0C0', flexShrink: 0, width: 36, textTransform: 'uppercase', fontSize: 10, paddingTop: 1 } }, entry.level),
+              h('span', { style: { color: '#C0C0D8', wordBreak: 'break-all' } }, entry.msg)
+            );
+          }),
+        h('div', { ref: logEndRef })
+      ) : null,
+
+      // NETWORK TAB
+      tab === 'network' ? h('div', null,
+        h('div', { style: { display: 'flex', gap: 6, marginBottom: 6 } },
+          h('button', { style: { background: '#1A2A1A', border: '1px solid #2A4A2A', color: '#80D4B0', borderRadius: 3, padding: '2px 8px', fontSize: 10, cursor: 'pointer' }, onClick: function() { __debug.clearNet(); } }, 'Clear'),
+          h('span', { style: { fontSize: 10, color: '#4A4A6A', alignSelf: 'center' } }, netReqs.length + ' requests')
+        ),
+        netReqs.length === 0
+          ? h('div', { style: { color: '#4A4A6A', fontSize: 11, padding: 8 } }, 'No fetch calls yet.')
+          : netReqs.slice().reverse().map(function(r, i) {
+            var ok = typeof r.status === 'number' && r.status < 400;
+            return h('div', { key: i, style: { display: 'flex', gap: 6, padding: '3px 0', borderBottom: '1px solid #1A1A2E', fontSize: 11, alignItems: 'flex-start' } },
+              h('span', { style: { color: '#4A4A6A', flexShrink: 0, width: 82 } }, r.ts),
+              h('span', { style: { color: '#A0A0FF', flexShrink: 0, width: 36 } }, r.method),
+              h('span', { style: { color: r.status === '…' ? '#808080' : ok ? '#80D4B0' : '#FF8080', flexShrink: 0, width: 32 } }, String(r.status)),
+              h('span', { style: { color: '#C0C0D8', flex: 1, wordBreak: 'break-all' } }, r.url),
+              r.duration != null ? h('span', { style: { color: '#4A6A8A', flexShrink: 0 } }, r.duration + 'ms') : null
+            );
+          })
+      ) : null,
+
+      // APP STATE TAB
+      tab === 'state' ? h('div', null,
+        h('div', { style: { color: '#4A6A8A', fontSize: 10, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 } }, 'Live App State'),
+        [
+          ['Mode',          appState.useDummy ? '🟡 Dummy Data' : '🟢 Live Data'],
+          ['Connected',     appState.connected ? '✓ Yes' : '✗ No'],
+          ['Loading',       appState.loading ? '...' : 'done'],
+          ['Active Tab',    appState.activeTab],
+          ['Suppliers',     appState.supplierCount + ' loaded'],
+          ['Watchlist',     appState.watchlistCount + ' cards'],
+          ['Alerts',        appState.alertCount + ' alerts'],
+          ['Tariff Scenarios', appState.scenarioCount + ' scenarios'],
+          ['Exec Brief',    appState.hasBrief ? 'loaded' : 'not loaded'],
+          ['Audit Log',     appState.auditCount + ' entries (localStorage)'],
+        ].map(function(row) {
+          return h('div', { key: row[0], style: { display: 'flex', gap: 8, padding: '4px 0', borderBottom: '1px solid #1E1E3A', fontSize: 11 } },
+            h('span', { style: { color: '#6A6A8A', width: 160 } }, row[0]),
+            h('span', { style: { color: '#C0D4E0' } }, row[1])
+          );
+        }),
+        h('div', { style: { marginTop: 12 } },
+          h('button', { style: { background: '#1A1A3A', border: '1px solid #3A3A6A', color: '#A0A0D0', borderRadius: 3, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }, onClick: function() { window.location.reload(); } }, '↻ Hard Reload'),
+          h('button', { style: { background: '#2A1A1A', border: '1px solid #5A2A2A', color: '#D08080', borderRadius: 3, padding: '4px 10px', fontSize: 11, cursor: 'pointer', marginLeft: 8 }, onClick: function() { localStorage.clear(); window.location.reload(); } }, '🗑 Clear Storage + Reload')
+        )
+      ) : null,
+
+      // AUDIT LOG TAB
+      tab === 'audit' ? h('div', null,
+        h('div', { style: { display: 'flex', gap: 6, marginBottom: 6 } },
+          h('button', { style: { background: '#2A1A1A', border: '1px solid #4A2A2A', color: '#FF8080', borderRadius: 3, padding: '2px 8px', fontSize: 10, cursor: 'pointer' }, onClick: function() { localStorage.removeItem('srr_audit_log'); setTick(function(t){return t+1;}); } }, 'Clear Audit Log'),
+          h('span', { style: { fontSize: 10, color: '#4A4A6A', alignSelf: 'center' } }, auditLog.length + ' actions logged')
+        ),
+        auditLog.length === 0
+          ? h('div', { style: { color: '#4A4A6A', fontSize: 11, padding: 8 } }, 'No audit actions yet. Take an action on a watchlist card or alert.')
+          : auditLog.slice().reverse().map(function(entry, i) {
+            return h('div', { key: i, style: { padding: '6px 0', borderBottom: '1px solid #1E1E3A', fontSize: 11 } },
+              h('div', { style: { display: 'flex', gap: 8 } },
+                h('span', { style: { color: '#4A4A6A' } }, entry.timestamp ? entry.timestamp.slice(0,19).replace('T',' ') : ''),
+                h('span', { style: { color: '#7A6EF0' } }, entry.type)
+              ),
+              h('div', { style: { color: '#A8C4E0', marginTop: 2 } }, entry.supplier + (entry.alertTitle ? ' · ' + entry.alertTitle : '')),
+              h('div', { style: { color: '#80D4B0', marginTop: 2 } }, 'Action: ' + (entry.action || '—')),
+              h('div', { style: { color: '#C0C0D8', marginTop: 2 } }, 'Rationale: ' + (entry.rationale || '—'))
+            );
+          })
+      ) : null
+    )
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
 // ROOT APP
 // ════════════════════════════════════════════════════════════════════════════════
 function App() {
@@ -846,8 +1129,19 @@ function App() {
     },
   ];
 
+  var auditCount = 0;
+  try { auditCount = JSON.parse(localStorage.getItem('srr_audit_log') || '[]').length; } catch(e) {}
+
+  var debugState = {
+    useDummy: useDummy, connected: connected, loading: loading, activeTab: activeTab,
+    supplierCount: suppliers.length, watchlistCount: watchlist.length,
+    alertCount: alerts.length, scenarioCount: tariffScenarios.length,
+    hasBrief: !!execBrief, auditCount: auditCount,
+  };
+
   return h(ConfigProvider, { theme: dominoTheme },
     h('div', { className: 'app-layout' },
+      h(DebugPanel, { appState: debugState }),
       h('div', { className: 'app-topnav' },
         h('div', { className: 'app-topnav-logo' },
           h('div', { className: 'app-topnav-logo-icon' }, '⬡'),
