@@ -1,4 +1,4 @@
-// SupplyRiskRadar — Main App
+// Supply Risk Radar - Main App
 'use strict';
 
 // ── Debug instrumentation (runs before anything else) ─────────────────────────
@@ -108,19 +108,19 @@ var useCallback = React.useCallback;
 // ── Domino theme ─────────────────────────────────────────────────────────────
 var dominoTheme = {
   token: {
-    colorPrimary: '#3B3BD3',
-    colorPrimaryHover: '#1820A0',
-    colorPrimaryActive: '#1820A0',
-    colorText: '#3F4547',
-    colorTextSecondary: '#7F8385',
-    colorTextTertiary: '#9EA4A6',
+    colorPrimary: '#543FDE',
+    colorPrimaryHover: '#3B23D1',
+    colorPrimaryActive: '#311EAE',
+    colorText: '#2E2E38',
+    colorTextSecondary: '#65657B',
+    colorTextTertiary: '#8F8FA3',
     colorSuccess: '#28A464',
     colorWarning: '#CCB718',
     colorError: '#C20A29',
     colorInfo: '#0070CC',
     colorBgContainer: '#FFFFFF',
     colorBgLayout: '#FAFAFA',
-    colorBorder: '#DBE4E8',
+    colorBorder: '#E0E0E0',
     fontFamily: 'Inter, Lato, Helvetica Neue, Arial, sans-serif',
     fontSize: 14,
     borderRadius: 4,
@@ -132,17 +132,26 @@ var dominoTheme = {
   },
 };
 
+// ── Highcharts Domino palette ────────────────────────────────────────────────
+if (typeof Highcharts !== 'undefined') {
+  Highcharts.setOptions({
+    colors: ['#543FDE', '#0070CC', '#28A464', '#CCB718', '#FF6543', '#E835A7', '#2EDCC4', '#A9734C'],
+    chart: { style: { fontFamily: 'Inter, Lato, Helvetica Neue, Arial, sans-serif' } },
+    credits: { enabled: false },
+  });
+}
+
 // ── API_GAPS ──────────────────────────────────────────────────────────────────
 var API_GAPS = {
-  distributeBrief:  { label: 'Distribute Brief',  message: 'Coming soon — SharePoint/Teams write integration is pending.', ready: false },
-  exportTariff:     { label: 'Export to Anaplan',  message: 'Coming soon — FP&A export API is in development.', ready: false },
-  bulkDismiss:      { label: 'Bulk Dismiss',       message: 'Coming soon — bulk write API is pending.', ready: false },
-  liveScoring:      { label: 'Live Re-score',      message: 'Coming soon — real-time ML scoring service is in development.', ready: false },
+  distributeBrief:  { label: 'Distribute Brief',  message: 'Coming soon - SharePoint/Teams write integration is pending.', ready: false },
+  exportTariff:     { label: 'Export to Anaplan',  message: 'Coming soon - FP&A export API is in development.', ready: false },
+  bulkDismiss:      { label: 'Bulk Dismiss',       message: 'Coming soon - bulk write API is pending.', ready: false },
+  liveScoring:      { label: 'Live Re-score',      message: 'Coming soon - real-time ML scoring service is in development.', ready: false },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function fmt$(n) {
-  if (!n && n !== 0) return '—';
+  if (!n && n !== 0) return '-';
   if (n >= 1e9) return '$' + (n / 1e9).toFixed(1) + 'B';
   if (n >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M';
   return '$' + n.toLocaleString();
@@ -169,8 +178,8 @@ function alternateTag(status) {
 }
 
 function countryFlag(country) {
-  var flags = { India: '🇮🇳', China: '🇨🇳', UK: '🇬🇧', Germany: '🇩🇪', Switzerland: '🇨🇭', USA: '🇺🇸', Belgium: '🇧🇪', Ireland: '🇮🇪', Singapore: '🇸🇬' };
-  return flags[country] || '🌐';
+  var codes = { India: 'IN', China: 'CN', UK: 'GB', Germany: 'DE', Switzerland: 'CH', USA: 'US', Belgium: 'BE', Ireland: 'IE', Singapore: 'SG' };
+  return codes[country] || '';
 }
 
 // ── StatCard ──────────────────────────────────────────────────────────────────
@@ -188,14 +197,157 @@ function ApiPendingBadge() {
   return h('span', { className: 'api-pending-badge' }, 'API Pending');
 }
 
+// ── AboutModal ────────────────────────────────────────────────────────────────
+function AboutModal(props) {
+  function sec(title, children) {
+    return h('div', { className: 'about-section' },
+      h('h4', { className: 'about-section-heading' }, title),
+      children
+    );
+  }
+  function row(label, body) {
+    return h('div', { className: 'about-row' },
+      h('div', { className: 'about-row-label' }, label),
+      h('div', { className: 'about-row-body' }, body)
+    );
+  }
+
+  return h(Modal, {
+    open: props.open,
+    onCancel: props.onClose,
+    footer: h(Button, { type: 'primary', onClick: props.onClose }, 'Close'),
+    title: h('span', { style: { fontSize: 16, fontWeight: 700 } }, 'About Supply Risk Radar'),
+    width: 760,
+  },
+    h('div', { className: 'about-body' },
+      h('p', { className: 'about-tagline' },
+        'Continuous supply risk monitoring for pharma. Fuses regulatory, weather, tariff, and geopolitical signals against the sponsor\'s drug portfolio so procurement and quality leads see what matters first, at the ingredient and supplier level.'
+      ),
+
+      h(Divider, { style: { margin: '12px 0' } }),
+
+      sec('The problem it solves', h('p', { className: 'about-para' },
+        'Pharma supply risk today is scattered across FDA databases, weather feeds, news wires, tariff notices, and internal spreadsheets listing every ingredient and its approved supplier. A labor strike in Hyderabad or a new FDA inspection finding at a sole-source ingredient site can sit un-triaged for days. Supply Risk Radar unifies these signals, ties each one to the specific drugs at risk, and proposes a mitigation path with source citations.'
+      )),
+
+      sec('Key terms',
+        h('ul', { className: 'about-list' },
+          h('li', null, h('strong', null, 'FDA Form 483'), ': a written notice an FDA inspector leaves at the end of a site inspection listing observations where the manufacturing site appears to not meet good-manufacturing-practice requirements. A 483 is a strong leading indicator of a Warning Letter or import ban.'),
+          h('li', null, h('strong', null, 'Ingredient supplier (API / KSM)'), ': the active pharmaceutical ingredient (API) is the molecule that makes a drug work. A key starting material (KSM) is an upstream precursor used to synthesize the API. Both are heavily regulated and often sole-sourced.'),
+          h('li', null, h('strong', null, 'Qualified alternate'), ': a second supplier the regulator has already accepted as an equivalent source. Having a qualified alternate is what makes a risk recoverable.'),
+          h('li', null, h('strong', null, 'Ingredient list (product recipe)'), ': for each drug product, the list of ingredients, their suppliers, and the approved manufacturing sites. This is the map the app scores risk against.')
+        )
+      ),
+
+      sec('Data sources (where the signal comes from)',
+        h('ul', { className: 'about-list' },
+          h('li', null, h('strong', null, 'FDA inspection outcomes'), ': Form 483s, Warning Letters, Import Alerts pulled daily from the openFDA API and FDA FOIA feeds. Raw JSON is written to storage, parsed into structured observations.'),
+          h('li', null, h('strong', null, 'EMA and MHRA GMP findings'), ': European and UK non-compliance notices from EudraGMDP and MHRA inspection reports.'),
+          h('li', null, h('strong', null, 'Weather and natural hazard'), ': NOAA, JMA, and national meteorological APIs for cyclones, flooding, river levels, wildfire.'),
+          h('li', null, h('strong', null, 'Geopolitical and labor'), ': Reuters, Bloomberg, and local-language news via a licensed aggregator (GDELT, Factiva). An entity resolution step maps free-text supplier mentions to the internal supplier list.'),
+          h('li', null, h('strong', null, 'Tariffs and trade policy'), ': USTR notices, WTO rulings, HS-code-indexed duty schedules.'),
+          h('li', null, h('strong', null, 'Internal enterprise data'), ': ingredient lists, approved suppliers, qualified alternates, procurement spend, and revenue at risk, pulled nightly from SAP, Oracle, and the Snowflake warehouse.')
+        )
+      ),
+
+      sec('Where the AI and ML sit',
+        h('ul', { className: 'about-list' },
+          h('li', null, h('strong', null, 'Risk fusion scorer'), ': an XGBoost gradient-boosted model that turns the raw signals (inspection findings, weather severity, news sentiment, tariff delta, spend, sole-source flag) into a 0-100 risk score for every supplier-drug pair.'),
+          h('li', null, h('strong', null, 'LLM reasoning and mitigation writer'), ': a large language model (served as a Model API) produces the plain-English reasoning chain you see in the Watchlist and drafts mitigation suggestions. Every claim is grounded in the source documents pulled by the ingestion jobs, so citations are real.'),
+          h('li', null, h('strong', null, 'News and social signal classifier'), ': a transformer-based classifier triages incoming news articles into risk types (labor, regulatory, logistics, cyber) and filters noise before anything reaches the scorer.'),
+          h('li', null, h('strong', null, 'Tariff impact model'), ': a deterministic what-if calculator that prices scenario deltas against the ingredient list and annualizes the cost-of-goods impact per drug.')
+        )
+      ),
+
+      sec('How user feedback improves the models',
+        h('p', { className: 'about-para' },
+          'Every action a user takes in the Watchlist and Alerts tabs (mark reviewed, dismiss, request CAPA, start alternate qualification, add rationale) is appended to a labeled feedback table. That feedback drives the models two ways:'
+        ),
+        h('ul', { className: 'about-list' },
+          h('li', null, h('strong', null, 'Weekly retraining of the risk scorer'), ': a scheduled job in Domino uses the latest feedback (true positives and false positives judged by humans) plus realized outcomes (did the 483 escalate to a Warning Letter, did the cyclone actually halt production) as new training labels. The retrained model is compared to the live one as a Domino Experiment; if it beats the champion, it is promoted.'),
+          h('li', null, h('strong', null, 'Preference tuning of the LLM'), ': when a user edits or rejects a mitigation suggestion, the pair (original suggestion, preferred version) becomes a preference pair used to periodically fine-tune the reasoner via reinforcement learning from human feedback.'),
+          h('li', null, h('strong', null, 'Alert fatigue control'), ': the classifier learns which alert types a given role routinely dismisses and suppresses them at the source, so each user sees 3-7 high-signal alerts per day instead of dozens.')
+        )
+      ),
+
+      sec('Domino platform tie-ins (how this becomes real)',
+        h('div', null,
+          row('Domino Datasets (file storage)',
+            'Yes, every ingestion job lands raw files in Domino Datasets - JSON from openFDA, CSV weather extracts, news article text, PDF 483s. Datasets are the versioned file store. A second job parses those files into unified tables (suppliers, signals, scores) which are written back as Dataset snapshots, giving a reproducible, auditable trail for every scoring run.'
+          ),
+          row('External Data Volumes',
+            'Live enterprise data (SAP ingredient extracts, Coupa spend, Snowflake revenue tables) is mounted read-only from the source system so the app reflects current portfolio state without copying sensitive commercial data into Domino.'
+          ),
+          row('Scheduled Jobs',
+            'Nightly ingestion jobs pull openFDA, NOAA, USTR, and the licensed news feed. A second job batch-scores every supplier-drug pair. A weekly job retrains the risk scorer on the latest feedback.'
+          ),
+          row('Model APIs',
+            'Three models are deployed as Domino Model APIs the app calls in real time: the risk-fusion scorer, the LLM reasoner that writes mitigation suggestions, and the tariff impact calculator.'
+          ),
+          row('Experiments and Model Registry',
+            'Every retraining run is tracked as a Domino Experiment with metrics and data lineage. The champion risk scorer is registered in the Model Registry. Drift monitors watch for shifts in signal distribution or prediction calibration and page the owning team.'
+          ),
+          row('Domino Governance',
+            'Each model is wrapped in a governance bundle with a policy pack covering data lineage, bias review, validation evidence, and periodic review sign-offs. Compliance can audit any risk score end to end, back to the raw source files.'
+          ),
+          row('Flows and Launchers',
+            'A Domino Flow orchestrates ingest to score to notify. Launchers let a procurement lead re-score the portfolio on demand or kick off an alternate-qualification workspace pre-loaded with the qualification protocol.'
+          ),
+          row('App Hosting',
+            'This interface is served as a Domino App with platform SSO, nginx routing, and workspace-level access inherited from the hosting project.'
+          ),
+          row('Audit logging',
+            'Every action logged from this UI persists to a governed Dataset and the Domino audit log, so action history is reviewable for CAPA closure and regulatory inspection.'
+          )
+        )
+      ),
+
+      sec('One-click actions from the app into Domino',
+        h('ul', { className: 'about-list' },
+          h('li', null, h('strong', null, 'Log action'), ' (Watchlist): writes a reviewed record + rationale to the governed action Dataset and triggers a Flow that notifies the named supplier quality lead.'),
+          h('li', null, h('strong', null, 'Start alternate qualification'), ': launches a pre-configured Domino workspace from a Launcher, pre-loaded with the qualification protocol notebook and the target supplier record.'),
+          h('li', null, h('strong', null, 'Request CAPA from supplier'), ': calls an outbound webhook that opens a CAPA ticket in the procurement system and writes the ticket ID back to the action Dataset.'),
+          h('li', null, h('strong', null, 'Re-score portfolio'), ': triggers the risk-fusion Launcher so the scorer re-runs with the latest signals within ~2 minutes.'),
+          h('li', null, h('strong', null, 'Approve and distribute Executive Brief'), ': pushes the generated brief to SharePoint and Teams via the distribution webhook (currently API Pending).'),
+          h('li', null, h('strong', null, 'Export tariff scenario'), ': writes the scenario delta table to the shared Anaplan export Dataset (currently API Pending).')
+        )
+      ),
+
+      sec('What needs to happen to go live',
+        h('ol', { className: 'about-list' },
+          h('li', null, 'Mount the sponsor ingredient list, approved supplier list, and qualified-alternates tables as Datasets or External Data Volumes.'),
+          h('li', null, 'Publish the three models (risk-fusion scorer, LLM reasoner, tariff calculator) as Domino Model APIs from governance-approved bundles.'),
+          h('li', null, 'Configure scheduled jobs for openFDA, NOAA, USTR, and news ingestion, with credentials in the Domino secret store.'),
+          h('li', null, 'Enable write endpoints on the Domino governance API so action logging persists beyond localStorage (see API Pending badges).'),
+          h('li', null, 'Wire SSO and role-based access so procurement, quality, and regulatory see role-appropriate views.')
+        )
+      ),
+
+      sec('Known gaps (shown as API Pending in the UI)',
+        h('ul', { className: 'about-list' },
+          h('li', null, 'Approve and distribute Executive Brief to SharePoint or Teams'),
+          h('li', null, 'Export tariff scenario to Anaplan'),
+          h('li', null, 'Bulk dismiss alerts'),
+          h('li', null, 'Real-time re-score on new signal arrival'),
+          h('li', null, 'Role propagation from SSO into the governance audit log')
+        )
+      ),
+
+      h('p', { className: 'about-footer-note' },
+        'Demo mode uses curated mock data across 25 supplier sites and 10 drug products. Toggle Dummy data off to connect live Domino APIs.'
+      )
+    )
+  );
+}
+
 // ════════════════════════════════════════════════════════════════════════════════
-// TAB 1 — World Map
+// TAB 1 - World Map
 // ════════════════════════════════════════════════════════════════════════════════
 function WorldMapTab(props) {
   var suppliers = props.suppliers;
-  var mapRef = useRef(null);
-  var leafletMap = useRef(null);
-  var markersRef = useRef([]);
+  var hcMap = useRef(null);
+  var _mapReady = useState(false); var mapReady = _mapReady[0]; var setMapReady = _mapReady[1];
+  var _mapData = useState(null); var mapData = _mapData[0]; var setMapData = _mapData[1];
 
   var _dr = useState(null); var drawerSupplier = _dr[0]; var setDrawerSupplier = _dr[1];
   var _cf = useState('All'); var catFilter = _cf[0]; var setCatFilter = _cf[1];
@@ -219,46 +371,126 @@ function WorldMapTab(props) {
     return { critical: c, high: hi, medium: med, low: lo };
   }, [suppliers]);
 
+  // Load world topology once
   useEffect(function() {
-    if (!window.L) return;
-    if (leafletMap.current) {
-      leafletMap.current.remove();
-      leafletMap.current = null;
-    }
-    var map = L.map('supply-map', { center: [25, 30], zoom: 2, zoomControl: true });
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors',
-      maxZoom: 18,
-    }).addTo(map);
-    leafletMap.current = map;
-    return function() { if (leafletMap.current) { leafletMap.current.remove(); leafletMap.current = null; } };
+    if (mapData) return;
+    fetch('https://code.highcharts.com/mapdata/custom/world.topo.json')
+      .then(function(r) { return r.json(); })
+      .then(function(data) { setMapData(data); })
+      .catch(function(err) { console.error('Map data fetch failed:', err); });
   }, []);
 
+  // Build chart once mapData is loaded
   useEffect(function() {
-    var map = leafletMap.current;
-    if (!map || !window.L) return;
-    markersRef.current.forEach(function(m) { map.removeLayer(m); });
-    markersRef.current = [];
+    if (!mapData || !window.Highcharts || !Highcharts.mapChart) return;
+    if (hcMap.current) { try { hcMap.current.destroy(); } catch(e) {} hcMap.current = null; }
 
-    filtered.forEach(function(s) {
-      var color = riskColor(s.riskLevel);
-      var size = s.riskLevel === 'critical' ? 16 : s.riskLevel === 'high' ? 13 : 10;
-      var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + (size * 2 + 4) + '" height="' + (size * 2 + 4) + '">' +
-        (s.riskLevel === 'critical' ? '<circle cx="' + (size + 2) + '" cy="' + (size + 2) + '" r="' + (size + 2) + '" fill="' + color + '" opacity="0.25"/>' : '') +
-        '<circle cx="' + (size + 2) + '" cy="' + (size + 2) + '" r="' + size + '" fill="' + color + '" stroke="#fff" stroke-width="2"/>' +
-        '</svg>';
-      var icon = L.divIcon({
-        html: svg,
-        className: '',
-        iconSize: [size * 2 + 4, size * 2 + 4],
-        iconAnchor: [size + 2, size + 2],
-      });
-      var marker = L.marker([s.lat, s.lng], { icon: icon }).addTo(map);
-      marker.on('click', function() { setDrawerSupplier(s); });
-      marker.bindTooltip(s.shortName + ' (' + s.country + ') — Risk: ' + s.riskScore, { permanent: false, direction: 'top' });
-      markersRef.current.push(marker);
+    var points = filtered.map(function(s) {
+      var baseRadius = s.riskLevel === 'critical' ? 13 : s.riskLevel === 'high' ? 10 : s.riskLevel === 'medium' ? 8 : 6;
+      var cls = (s.riskLevel === 'critical' || s.riskLevel === 'high') ? ('risk-pulse risk-pulse-' + s.riskLevel) : '';
+      return {
+        name: s.shortName || s.name,
+        lat: s.lat,
+        lon: s.lng,
+        color: riskColor(s.riskLevel),
+        className: cls,
+        marker: {
+          radius: baseRadius,
+          fillColor: riskColor(s.riskLevel),
+          lineColor: '#fff',
+          lineWidth: 2,
+          symbol: 'circle',
+        },
+        _supplier: s,
+      };
     });
-  }, [filtered]);
+
+    hcMap.current = Highcharts.mapChart('supply-map', {
+      chart: {
+        map: mapData,
+        backgroundColor: '#F5F7FA',
+        spacing: [0, 0, 0, 0],
+        animation: { duration: 400 },
+      },
+      title: { text: null },
+      credits: { enabled: false },
+      mapNavigation: {
+        enabled: true,
+        enableMouseWheelZoom: false,
+        buttonOptions: { verticalAlign: 'bottom', theme: { fill: '#fff', 'stroke-width': 1, stroke: '#DBE4E8', r: 4 } },
+      },
+      legend: { enabled: false },
+      tooltip: {
+        useHTML: true,
+        backgroundColor: '#2E2E38',
+        borderWidth: 0,
+        borderRadius: 6,
+        style: { color: '#fff', fontSize: '12px' },
+        formatter: function() {
+          var p = this.point;
+          if (!p._supplier) return false;
+          var s = p._supplier;
+          return '<div style="padding:4px 2px;">' +
+            '<div style="font-weight:700;font-size:13px;margin-bottom:4px;">' + (s.name || s.shortName) + '</div>' +
+            '<div style="color:#C4C4D4;font-size:11px;margin-bottom:6px;">' + (s.country || '') + ' · ' + (s.category || '') + '</div>' +
+            '<div><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + riskColor(s.riskLevel) + ';margin-right:6px;"></span>Risk score <b>' + s.riskScore + '</b></div>' +
+            (s.sole ? '<div style="color:#FCA5A5;font-size:11px;margin-top:4px;">Sole-source · No qualified alternate</div>' : '') +
+          '</div>';
+        },
+      },
+      plotOptions: {
+        map: { enableMouseTracking: false },
+        mappoint: {
+          cursor: 'pointer',
+          states: { hover: { halo: { size: 10, attributes: { fill: 'rgba(84,63,222,0.25)' } } } },
+          point: {
+            events: {
+              click: function() { if (this._supplier) setDrawerSupplier(this._supplier); },
+            },
+          },
+        },
+      },
+      series: [
+        {
+          name: 'World',
+          nullColor: '#E6EAF0',
+          borderColor: '#C9D2DB',
+          borderWidth: 0.5,
+          states: { hover: { color: '#E6EAF0', borderColor: '#C9D2DB' } },
+          enableMouseTracking: false,
+          showInLegend: false,
+        },
+        {
+          type: 'mappoint',
+          name: 'Suppliers',
+          data: points,
+          dataLabels: { enabled: false },
+          animation: { duration: 600 },
+        },
+      ],
+    });
+    setMapReady(true);
+    return function() { if (hcMap.current) { try { hcMap.current.destroy(); } catch(e) {} hcMap.current = null; } };
+  }, [mapData]);
+
+  // Update points when filter changes
+  useEffect(function() {
+    if (!hcMap.current || !mapReady) return;
+    var points = filtered.map(function(s) {
+      var baseRadius = s.riskLevel === 'critical' ? 13 : s.riskLevel === 'high' ? 10 : s.riskLevel === 'medium' ? 8 : 6;
+      var cls = (s.riskLevel === 'critical' || s.riskLevel === 'high') ? ('risk-pulse risk-pulse-' + s.riskLevel) : '';
+      return {
+        name: s.shortName || s.name,
+        lat: s.lat,
+        lon: s.lng,
+        color: riskColor(s.riskLevel),
+        className: cls,
+        marker: { radius: baseRadius, fillColor: riskColor(s.riskLevel), lineColor: '#fff', lineWidth: 2, symbol: 'circle' },
+        _supplier: s,
+      };
+    });
+    try { hcMap.current.series[1].setData(points, true, { duration: 400 }); } catch(e) {}
+  }, [filtered, mapReady]);
 
   return h('div', { className: 'tab-pane' },
     h('div', { className: 'stats-row' },
@@ -278,10 +510,10 @@ function WorldMapTab(props) {
         value: riskFilter, onChange: setRiskFilter, style: { width: 160 },
         options: [
           { label: 'All Risk Levels', value: 'All' },
-          { label: '🔴 Critical', value: 'critical' },
-          { label: '🟠 High', value: 'high' },
-          { label: '🟡 Medium', value: 'medium' },
-          { label: '🟢 Low', value: 'low' },
+          { label: 'Critical', value: 'critical' },
+          { label: 'High', value: 'high' },
+          { label: 'Medium', value: 'medium' },
+          { label: 'Low', value: 'low' },
         ]
       }),
       h('div', { className: 'map-legend', style: { marginLeft: 'auto' } },
@@ -303,7 +535,7 @@ function WorldMapTab(props) {
       onClose: function() { setDrawerSupplier(null); },
       title: drawerSupplier ? h('span', null, countryFlag(drawerSupplier.country), ' ', drawerSupplier.name) : '',
       width: 420,
-      extra: drawerSupplier ? h(Tag, { color: drawerSupplier.riskLevel === 'critical' ? 'error' : drawerSupplier.riskLevel === 'high' ? 'warning' : 'default' }, 'Risk: ' + (drawerSupplier.riskScore || '—')) : null,
+      extra: drawerSupplier ? h(Tag, { color: drawerSupplier.riskLevel === 'critical' ? 'error' : drawerSupplier.riskLevel === 'high' ? 'warning' : 'default' }, 'Risk: ' + (drawerSupplier.riskScore || '-')) : null,
     },
       drawerSupplier ? h('div', null,
         h('div', { style: { display: 'flex', gap: 12, marginBottom: 16 } },
@@ -321,7 +553,7 @@ function WorldMapTab(props) {
           )
         ),
 
-        drawerSupplier.sole ? h(Alert, { type: 'error', message: 'Sole-Source Supplier — No Qualified Alternate', showIcon: true, style: { marginBottom: 12 } }) : null,
+        drawerSupplier.sole ? h(Alert, { type: 'error', message: 'Sole-Source Supplier - No Qualified Alternate', showIcon: true, style: { marginBottom: 12 } }) : null,
 
         h(Divider, { orientation: 'left', plain: true }, 'Alternate Status'),
         alternateTag(drawerSupplier.alternateStatus),
@@ -329,7 +561,7 @@ function WorldMapTab(props) {
         drawerSupplier.activeEvents && drawerSupplier.activeEvents.length > 0 ? h('div', null,
           h(Divider, { orientation: 'left', plain: true }, 'Active Risk Events'),
           drawerSupplier.activeEvents.map(function(ev, i) {
-            return h('div', { key: i, style: { background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 4, padding: '8px 10px', marginBottom: 6, fontSize: 12, color: '#2E2E38' } }, '⚠ ', ev);
+            return h('div', { key: i, style: { background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 4, padding: '8px 10px', marginBottom: 6, fontSize: 12, color: '#2E2E38' } }, '', ev);
           })
         ) : h('div', null, h(Divider, { orientation: 'left', plain: true }, 'Active Risk Events'), h('div', { style: { color: '#8F8FA3', fontSize: 12 } }, 'No active events')),
 
@@ -358,7 +590,7 @@ function WorldMapTab(props) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
-// TAB 2 — Daily Watchlist
+// TAB 2 - Daily Watchlist
 // ════════════════════════════════════════════════════════════════════════════════
 function WatchlistTab(props) {
   var watchlist = props.watchlist;
@@ -430,7 +662,7 @@ function WatchlistTab(props) {
               h(Tag, { color: card.riskScore >= 80 ? 'error' : card.riskScore >= 60 ? 'warning' : 'default', style: { fontWeight: 700 } }, 'Risk ' + card.riskScore),
               alternateTag(card.alternateStatus),
               h(Tag, { style: { fontSize: 11 } }, card.leadTimeDays + '-day lead time'),
-              card.reviewedAt ? h(Tag, { color: 'success', style: { fontSize: 11 } }, '✓ Reviewed') : null
+              card.reviewedAt ? h(Tag, { color: 'success', style: { fontSize: 11 } }, 'Reviewed') : null
             ),
             h('div', { style: { marginTop: 8 } },
               card.riskDrivers.map(function(d) { return h(Tag, { key: d, color: 'purple', style: { fontSize: 10, marginBottom: 2 } }, d); })
@@ -472,7 +704,7 @@ function WatchlistTab(props) {
     h(Modal, {
       open: !!actionModal,
       onCancel: function() { setActionModal(null); },
-      title: actionModal ? 'Log action — ' + actionModal.supplierName : '',
+      title: actionModal ? 'Log action - ' + actionModal.supplierName : '',
       onOk: function() { form.submit(); },
       okText: 'Save action',
     },
@@ -491,9 +723,9 @@ function WatchlistTab(props) {
               { label: 'Authorize safety stock build', value: 'safety_stock' },
               { label: 'Escalate to CPO / procurement leadership', value: 'escalated' },
               { label: 'Engage regulatory affairs for DMF review', value: 'regulatory' },
-              { label: 'Activate BCP — business continuity protocol', value: 'bcp' },
+              { label: 'Activate BCP - business continuity protocol', value: 'bcp' },
               { label: 'Switch order to alternate supplier', value: 'switch' },
-              { label: 'Monitor — no action required', value: 'monitor' },
+              { label: 'Monitor - no action required', value: 'monitor' },
             ]
           })
         ),
@@ -506,7 +738,7 @@ function WatchlistTab(props) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
-// TAB 3 — Alert Detail
+// TAB 3 - Alert Detail
 // ════════════════════════════════════════════════════════════════════════════════
 function AlertsTab(props) {
   var alerts = props.alerts;
@@ -561,7 +793,7 @@ function AlertsTab(props) {
   return h('div', { className: 'tab-pane' },
     h('div', { className: 'alert-fatigue-header' },
       h('span', { style: { fontSize: 16 } }, '🎯'),
-      h('span', null, h('b', null, filtered.length + ' alerts today'), ' — calibrated to 3–7 high-signal events per user per day. Every alert is BOM-mapped and source-cited.')
+      h('span', null, h('b', null, filtered.length + ' alerts today'), ' - calibrated to 3–7 high-signal events per user per day. Every alert is BOM-mapped and source-cited.')
     ),
 
     h('div', { className: 'stats-row' },
@@ -580,9 +812,9 @@ function AlertsTab(props) {
         value: sevFilter, onChange: setSevFilter, style: { width: 160 },
         options: [
           { label: 'All Severities', value: 'All' },
-          { label: '🔴 Critical', value: 'critical' },
-          { label: '🟠 High', value: 'high' },
-          { label: '🟡 Medium', value: 'medium' },
+          { label: 'Critical', value: 'critical' },
+          { label: 'High', value: 'high' },
+          { label: 'Medium', value: 'medium' },
         ]
       }),
       h(Tooltip, { title: API_GAPS.bulkDismiss.message },
@@ -603,7 +835,7 @@ function AlertsTab(props) {
           ),
           h('div', { style: { marginLeft: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 } },
             h(Tag, { color: alert.severity === 'critical' ? 'error' : alert.severity === 'high' ? 'warning' : 'default' }, alert.severity.charAt(0).toUpperCase() + alert.severity.slice(1)),
-            alert.reviewedAt ? h(Tag, { color: 'success', style: { fontSize: 10 } }, '✓ Reviewed') : null
+            alert.reviewedAt ? h(Tag, { color: 'success', style: { fontSize: 10 } }, 'Reviewed') : null
           )
         ),
         h('div', { className: 'alert-body' },
@@ -611,12 +843,12 @@ function AlertsTab(props) {
           h('div', { className: 'alert-source' }, 'Source: ', alert.sourceLabel, alert.sourceUrl ? h('a', { href: '#', style: { marginLeft: 4, color: '#3B3BD3' }, onClick: function(e) { e.preventDefault(); message.info('Source: ' + alert.sourceLabel); } }, 'View source') : null),
           alert.drugImpact && alert.drugImpact.length > 0 ? h('div', { className: 'alert-drug-impact' },
             h('div', { className: 'section-label', style: { marginTop: 8 } }, 'Drug products affected'),
-            alert.drugImpact.map(function(d, i) { return h('div', { key: i, style: { fontSize: 12, color: '#C20A29', fontWeight: 500 } }, '⚠ ', d); })
+            alert.drugImpact.map(function(d, i) { return h('div', { key: i, style: { fontSize: 12, color: '#C20A29', fontWeight: 500 } }, '', d); })
           ) : null
         ),
         h('div', { className: 'alert-action-row' },
           h(Button, { size: 'small', onClick: function() { setActionModal(alert); form.resetFields(); } }, 'Log action'),
-          h(Button, { size: 'small', type: 'text', onClick: function() { markReviewed(alert.id); } }, alert.reviewedAt ? '✓ Reviewed' : 'Mark reviewed'),
+          h(Button, { size: 'small', type: 'text', onClick: function() { markReviewed(alert.id); } }, alert.reviewedAt ? 'Reviewed' : 'Mark reviewed'),
           h(Button, { size: 'small', type: 'text', danger: true, onClick: function() { dismiss(alert.id); } }, 'Dismiss'),
           h('div', { style: { marginLeft: 'auto', fontSize: 11, color: '#8F8FA3' } }, 'Confidence: ', h('b', null, Math.round((alert.confidence || 0.8) * 100) + '%'))
         )
@@ -641,7 +873,7 @@ function AlertsTab(props) {
     h(Modal, {
       open: !!actionModal,
       onCancel: function() { setActionModal(null); },
-      title: actionModal ? 'Log action — ' + (actionModal.title || '') : '',
+      title: actionModal ? 'Log action - ' + (actionModal.title || '') : '',
       onOk: function() { form.submit(); },
       okText: 'Save action',
     },
@@ -656,7 +888,7 @@ function AlertsTab(props) {
             { label: 'Initiate alternate qualification', value: 'alt_qual' },
             { label: 'Authorize safety stock build', value: 'safety_stock' },
             { label: 'Escalate to leadership', value: 'escalated' },
-            { label: 'Monitor — no action required', value: 'monitor' },
+            { label: 'Monitor - no action required', value: 'monitor' },
           ]})
         ),
         h(Form.Item, { label: 'Rationale', name: 'rationale', rules: [{ required: true, message: 'Rationale is required for the audit trail' }] },
@@ -668,7 +900,7 @@ function AlertsTab(props) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
-// TAB 4 — Tariff Modeler
+// TAB 4 - Tariff Modeler
 // ════════════════════════════════════════════════════════════════════════════════
 function TariffTab(props) {
   var scenarios = props.scenarios;
@@ -727,7 +959,7 @@ function TariffTab(props) {
               h('span', { style: { fontWeight: 700, color: dp.exposure > 0 ? '#C20A29' : '#28A464' } }, dp.exposure > 0 ? '+' + fmt$(dp.exposure) + '/yr' : '$0')
             ),
             h('div', { className: 'exposure-bar' },
-              h('div', { className: 'exposure-bar-fill', style: { width: (dp.exposure / maxExposure * 100) + '%', background: dp.exposure > 5000000 ? '#C20A29' : dp.exposure > 1000000 ? '#E06600' : '#3B3BD3' } })
+              h('div', { className: 'exposure-bar-fill', style: { width: (dp.exposure / maxExposure * 100) + '%', background: dp.exposure > 5000000 ? '#C20A29' : dp.exposure > 1000000 ? '#E06600' : '#543FDE' } })
             ),
             dp.cogsDelta > 0 ? h('div', { style: { fontSize: 11, color: '#8F8FA3', marginTop: 2 } }, 'COGS impact: +' + dp.cogsDelta.toFixed(2) + '%') : null
           );
@@ -753,7 +985,7 @@ function TariffTab(props) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
-// TAB 5 — Executive Brief
+// TAB 5 - Executive Brief
 // ════════════════════════════════════════════════════════════════════════════════
 function ExecBriefTab(props) {
   var brief = props.brief;
@@ -787,8 +1019,8 @@ function ExecBriefTab(props) {
 
     h('div', { className: 'brief-doc' },
       h('div', { className: 'brief-header' },
-        h('div', { className: 'brief-title' }, 'Supplier Risk Radar — Weekly Executive Brief'),
-        h('div', { className: 'brief-meta' }, 'Auto-generated by SupplyRiskRadar · Week ending ', currentBrief.weekEnding, ' · Confidential — Internal Distribution Only')
+        h('div', { className: 'brief-title' }, 'Supplier Risk Radar - Weekly Executive Brief'),
+        h('div', { className: 'brief-meta' }, 'Auto-generated by Supply Risk Radar · Week ending ', currentBrief.weekEnding, ' · Confidential - Internal Distribution Only')
       ),
 
       h('div', { className: 'brief-section' },
@@ -834,7 +1066,7 @@ function ExecBriefTab(props) {
       ),
 
       h('div', { style: { marginTop: 24, padding: '12px 0', borderTop: '1px solid #DBE4E8', fontSize: 11, color: '#8F8FA3' } },
-        'This brief was auto-generated by SupplyRiskRadar using AI-assisted synthesis of public risk signals and internal BOM/AVL data. All assertions are source-cited. Procurement leads should review before distribution. Not for trading-desk use.'
+        'This brief was auto-generated by Supply Risk Radar using AI-assisted synthesis of public risk signals and internal BOM/AVL data. All assertions are source-cited. Procurement leads should review before distribution. Not for trading-desk use.'
       )
     )
   );
@@ -908,7 +1140,7 @@ function DebugPanel(props) {
 
   if (!open) {
     return h('div', { style: triggerStyle, onClick: function() { setOpen(true); }, title: 'Open Debug Panel (Ctrl+Shift+D)' },
-      '⬡ DBG ' + (logs.filter(function(l){return l.level==='error';}).length > 0 ? '🔴' + logs.filter(function(l){return l.level==='error';}).length : '✓')
+      'DBG ' + (logs.filter(function(l){return l.level==='error';}).length > 0 ? '' + logs.filter(function(l){return l.level==='error';}).length : 'ok')
     );
   }
 
@@ -922,7 +1154,7 @@ function DebugPanel(props) {
   return h('div', { style: panelStyle },
     // Header bar
     h('div', { style: { background: '#0D0D1A', padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid #2A2A4A', flexShrink: 0 } },
-      h('span', { style: { color: '#7A7AEE', fontWeight: 700, fontSize: 12 } }, '⬡ SupplyRiskRadar Debug'),
+      h('span', { style: { color: '#7A7AEE', fontWeight: 700, fontSize: 12 } }, 'Supply Risk Radar Debug'),
       h('span', { style: { fontSize: 10, color: '#4A4A6A', marginLeft: 4 } }, 'Ctrl+Shift+D'),
       h('button', { style: tabBtnStyle('globals'), onClick: function() { setTab('globals'); } }, 'Globals'),
       h('button', { style: tabBtnStyle('logs'), onClick: function() { setTab('logs'); } }, 'Console (' + logs.length + ')'),
@@ -931,9 +1163,9 @@ function DebugPanel(props) {
       h('button', { style: tabBtnStyle('audit'), onClick: function() { setTab('audit'); } }, 'Audit (' + auditLog.length + ')'),
       h('div', { style: { flex: 1 } }),
       logs.filter(function(l){return l.level==='error';}).length > 0
-        ? h('span', { style: { fontSize: 10, color: '#FF8080', marginRight: 8 } }, '🔴 ' + logs.filter(function(l){return l.level==='error';}).length + ' errors')
-        : h('span', { style: { fontSize: 10, color: '#80D4B0', marginRight: 8 } }, '✓ no errors'),
-      h('button', { style: { background: 'transparent', border: 'none', color: '#8080A0', cursor: 'pointer', fontSize: 14, padding: '0 4px' }, onClick: function() { setOpen(false); } }, '✕')
+        ? h('span', { style: { fontSize: 10, color: '#FF8080', marginRight: 8 } }, '' + logs.filter(function(l){return l.level==='error';}).length + ' errors')
+        : h('span', { style: { fontSize: 10, color: '#80D4B0', marginRight: 8 } }, 'no errors'),
+      h('button', { style: { background: 'transparent', border: 'none', color: '#8080A0', cursor: 'pointer', fontSize: 14, padding: '0 4px' }, onClick: function() { setOpen(false); } }, 'x')
     ),
 
     // Content
@@ -944,7 +1176,7 @@ function DebugPanel(props) {
         h('div', { style: { color: '#4A6A8A', fontSize: 10, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 } }, 'Library & Mock Data Status'),
         globals.map(function(g) {
           return h('div', { key: g.name, style: { display: 'flex', gap: 8, padding: '3px 0', borderBottom: '1px solid #1E1E3A', fontSize: 11 } },
-            h('span', { style: { color: g.ok ? '#80D4B0' : '#FF8080', width: 16 } }, g.ok ? '✓' : '✗'),
+            h('span', { style: { color: g.ok ? '#80D4B0' : '#FF8080', width: 16 } }, g.ok ? 'ok' : 'x'),
             h('span', { style: { color: '#A0A0C0', width: 200 } }, g.name),
             h('span', { style: { color: g.ok ? '#C0D4E0' : '#FF6060' } }, g.val)
           );
@@ -1001,8 +1233,8 @@ function DebugPanel(props) {
       tab === 'state' ? h('div', null,
         h('div', { style: { color: '#4A6A8A', fontSize: 10, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 } }, 'Live App State'),
         [
-          ['Mode',          appState.useDummy ? '🟡 Dummy Data' : '🟢 Live Data'],
-          ['Connected',     appState.connected ? '✓ Yes' : '✗ No'],
+          ['Mode',          appState.useDummy ? 'Dummy Data' : 'Live Data'],
+          ['Connected',     appState.connected ? 'Yes' : 'No'],
           ['Loading',       appState.loading ? '...' : 'done'],
           ['Active Tab',    appState.activeTab],
           ['Suppliers',     appState.supplierCount + ' loaded'],
@@ -1018,8 +1250,8 @@ function DebugPanel(props) {
           );
         }),
         h('div', { style: { marginTop: 12 } },
-          h('button', { style: { background: '#1A1A3A', border: '1px solid #3A3A6A', color: '#A0A0D0', borderRadius: 3, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }, onClick: function() { window.location.reload(); } }, '↻ Hard Reload'),
-          h('button', { style: { background: '#2A1A1A', border: '1px solid #5A2A2A', color: '#D08080', borderRadius: 3, padding: '4px 10px', fontSize: 11, cursor: 'pointer', marginLeft: 8 }, onClick: function() { localStorage.clear(); window.location.reload(); } }, '🗑 Clear Storage + Reload')
+          h('button', { style: { background: '#1A1A3A', border: '1px solid #3A3A6A', color: '#A0A0D0', borderRadius: 3, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }, onClick: function() { window.location.reload(); } }, 'Hard Reload'),
+          h('button', { style: { background: '#2A1A1A', border: '1px solid #5A2A2A', color: '#D08080', borderRadius: 3, padding: '4px 10px', fontSize: 11, cursor: 'pointer', marginLeft: 8 }, onClick: function() { localStorage.clear(); window.location.reload(); } }, 'Clear Storage + Reload')
         )
       ) : null,
 
@@ -1038,8 +1270,8 @@ function DebugPanel(props) {
                 h('span', { style: { color: '#7A7AEE' } }, entry.type)
               ),
               h('div', { style: { color: '#A8C4E0', marginTop: 2 } }, entry.supplier + (entry.alertTitle ? ' · ' + entry.alertTitle : '')),
-              h('div', { style: { color: '#80D4B0', marginTop: 2 } }, 'Action: ' + (entry.action || '—')),
-              h('div', { style: { color: '#C0C0D8', marginTop: 2 } }, 'Rationale: ' + (entry.rationale || '—'))
+              h('div', { style: { color: '#80D4B0', marginTop: 2 } }, 'Action: ' + (entry.action || '-')),
+              h('div', { style: { color: '#C0C0D8', marginTop: 2 } }, 'Rationale: ' + (entry.rationale || '-'))
             );
           })
       ) : null
@@ -1055,6 +1287,7 @@ function App() {
   var _c = useState(false); var connected = _c[0]; var setConnected = _c[1];
   var _l = useState(true); var loading = _l[0]; var setLoading = _l[1];
   var _at = useState('map'); var activeTab = _at[0]; var setActiveTab = _at[1];
+  var _ab = useState(false); var aboutOpen = _ab[0]; var setAboutOpen = _ab[1];
 
   var _sup = useState([]); var suppliers = _sup[0]; var setSuppliers = _sup[1];
   var _wl = useState([]); var watchlist = _wl[0]; var setWatchlist = _wl[1];
@@ -1103,27 +1336,27 @@ function App() {
   var tabItems = [
     {
       key: 'map',
-      label: h('span', null, '🗺 World Map'),
+      label: h('span', null, 'World Map'),
       children: loading ? h('div', { style: { textAlign: 'center', padding: 60 } }, h(Spin, { size: 'large' })) : h(WorldMapTab, { suppliers: suppliers }),
     },
     {
       key: 'watchlist',
-      label: h('span', null, '📋 Daily Watchlist', unreviewed > 0 ? h(Badge, { count: unreviewed, size: 'small', style: { marginLeft: 6, background: '#C20A29' } }) : null),
+      label: h('span', null, 'Daily Watchlist', unreviewed > 0 ? h(Badge, { count: unreviewed, size: 'small', style: { marginLeft: 6, background: '#C20A29' } }) : null),
       children: h(WatchlistTab, { watchlist: watchlist }),
     },
     {
       key: 'alerts',
-      label: h('span', null, '⚠ Alerts', activeAlerts > 0 ? h(Badge, { count: activeAlerts, size: 'small', style: { marginLeft: 6 } }) : null),
+      label: h('span', null, 'Alerts', activeAlerts > 0 ? h(Badge, { count: activeAlerts, size: 'small', style: { marginLeft: 6 } }) : null),
       children: h(AlertsTab, { alerts: alerts }),
     },
     {
       key: 'tariff',
-      label: '📊 Tariff Modeler',
+      label: 'Tariff Modeler',
       children: h(TariffTab, { scenarios: tariffScenarios }),
     },
     {
       key: 'brief',
-      label: '📄 Executive Brief',
+      label: 'Executive Brief',
       children: h(ExecBriefTab, { brief: execBrief }),
     },
   ];
@@ -1139,21 +1372,25 @@ function App() {
   };
 
   return h(ConfigProvider, { theme: dominoTheme },
-    h('div', { className: 'app-layout' },
+    h('div', { className: 'app-layout app-layout-no-topnav' },
       h(DebugPanel, { appState: debugState }),
-      h('div', { className: 'app-topnav' },
-        h('div', { className: 'app-topnav-logo' },
-          h('div', { className: 'app-topnav-logo-icon' }, '⬡'),
-          'SupplyRiskRadar'
-        ),
-        h('div', { className: 'app-topnav-spacer' }),
-        h('div', { className: 'app-topnav-meta' }, 'Portfolio: All Categories · 25 Suppliers Monitored'),
-        !connected ? h('div', { className: 'dummy-data-toggle' },
-          h('span', null, 'Dummy Data'),
-          h(Switch, { checked: useDummy, onChange: handleToggle, size: 'small' })
-        ) : null
-      ),
       h('div', { className: 'app-content' },
+        h('div', { style: { padding: '16px 20px 0' } },
+          h('div', { className: 'search-card' },
+            h('div', null,
+              h('div', { className: 'search-card-title' }, 'Supply Risk Radar'),
+              h('div', { className: 'search-card-sub' }, 'Pharma supply chain risk fusion across FDA 483s, weather, tariffs, and geopolitics')
+            ),
+            h('div', { className: 'search-card-right' },
+              h('div', { style: { fontSize: 12, color: '#65657B' } }, suppliers.length + ' suppliers monitored'),
+              !connected ? h('div', { className: 'dummy-data-toggle', style: { color: '#65657B' } },
+                h('span', null, 'Dummy data'),
+                h(Switch, { checked: useDummy, onChange: handleToggle, size: 'small' })
+              ) : null,
+              h(Button, { size: 'small', onClick: function() { setAboutOpen(true); } }, 'About')
+            )
+          )
+        ),
         h(Tabs, {
           className: 'main-tabs',
           activeKey: activeTab,
@@ -1161,7 +1398,8 @@ function App() {
           items: tabItems,
           style: { flex: 1, display: 'flex', flexDirection: 'column' },
         })
-      )
+      ),
+      h(AboutModal, { open: aboutOpen, onClose: function() { setAboutOpen(false); } })
     )
   );
 }
