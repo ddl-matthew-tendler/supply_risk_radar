@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SupplyRiskRadar</title>
+
+  <!-- Leaflet CSS must load before app.js -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <!-- Ant Design reset -->
+  <link href="https://unpkg.com/antd@5.11.2/dist/reset.css" rel="stylesheet">
+
+  <!-- Inter font -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body, #root { height: 100%; margin: 0; padding: 0; }
+    body { font-family: 'Inter', 'Lato', 'Helvetica Neue', Arial, sans-serif; background: #FAFAFA; }
+
+    /* Layout */
+    .app-layout { display: flex; flex-direction: column; min-height: 100vh; }
+    .app-topnav { height: 44px; background: #2E2E38; display: flex; align-items: center; padding: 0 20px; gap: 16px; flex-shrink: 0; z-index: 100; }
+    .app-topnav-logo { color: #fff; font-weight: 700; font-size: 16px; letter-spacing: -0.3px; display: flex; align-items: center; gap: 8px; }
+    .app-topnav-logo-icon { width: 22px; height: 22px; background: #543FDE; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+    .app-topnav-spacer { flex: 1; }
+    .app-topnav-meta { color: #9191A8; font-size: 12px; }
+    .dummy-data-toggle { display: flex; align-items: center; gap: 6px; color: #C4C4D4; font-size: 12px; }
+    .app-content { flex: 1; padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+
+    /* Tabs */
+    .main-tabs .ant-tabs-nav { padding: 0 20px; background: #fff; border-bottom: 1px solid #E0E0E0; margin: 0; }
+    .main-tabs .ant-tabs-content-holder { overflow: auto; }
+    .tab-pane { padding: 20px; }
+
+    /* Stats row */
+    .stats-row { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+    .stat-card { background: #fff; border: 1px solid #E0E0E0; border-radius: 8px; padding: 14px 18px; min-width: 140px; flex: 1; }
+    .stat-card-clickable { cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease; }
+    .stat-card-clickable:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+    .stat-card-active { outline: 2px solid #543FDE; outline-offset: -2px; }
+    .stat-card-label { font-size: 11px; font-weight: 600; color: #8F8FA3; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+    .stat-card-value { font-size: 26px; font-weight: 700; color: #2E2E38; line-height: 1.1; }
+    .stat-card-value.danger { color: #C20A29; }
+    .stat-card-value.warning { color: #CCB718; }
+    .stat-card-value.success { color: #28A464; }
+    .stat-card-value.primary { color: #543FDE; }
+    .stat-card-value.info { color: #0070CC; }
+    .stat-card-sub { font-size: 11px; color: #8F8FA3; margin-top: 2px; }
+
+    /* Panel */
+    .panel { background: #fff; border: 1px solid #E0E0E0; border-radius: 8px; overflow: hidden; }
+    .panel-header { padding: 14px 16px; border-bottom: 1px solid #F0F0F0; display: flex; align-items: center; gap: 8px; }
+    .panel-title { font-weight: 600; font-size: 14px; color: #2E2E38; flex: 1; }
+
+    /* Map */
+    #supply-map { width: 100%; height: calc(100vh - 145px); min-height: 500px; border-radius: 8px; overflow: hidden; border: 1px solid #E0E0E0; }
+    .map-controls { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; }
+    .map-legend { background: #fff; border: 1px solid #E0E0E0; border-radius: 6px; padding: 10px 14px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+    .legend-item { display: flex; align-items: center; font-size: 12px; color: #65657B; }
+
+    /* Risk score gauge */
+    .risk-score { font-size: 28px; font-weight: 700; }
+    .risk-score.critical { color: #C20A29; }
+    .risk-score.high { color: #E06600; }
+    .risk-score.medium { color: #CCB718; }
+    .risk-score.low { color: #28A464; }
+
+    /* Watchlist cards */
+    .watchlist-card { background: #fff; border: 1px solid #E0E0E0; border-radius: 8px; margin-bottom: 12px; overflow: hidden; transition: box-shadow 0.15s; }
+    .watchlist-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.07); }
+    .watchlist-card-header { display: flex; align-items: flex-start; padding: 14px 16px; gap: 14px; }
+    .rank-badge { width: 32px; height: 32px; border-radius: 50%; background: #543FDE; color: #fff; font-weight: 700; font-size: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .rank-badge.critical { background: #C20A29; }
+    .rank-badge.high { background: #E06600; }
+    .rank-badge.medium { background: #CCB718; }
+    .card-body { flex: 1; }
+    .card-supplier-name { font-weight: 600; font-size: 14px; color: #2E2E38; }
+    .card-drug-name { font-size: 12px; color: #65657B; margin-top: 2px; }
+    .card-meta-row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; align-items: center; }
+    .card-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; }
+    .card-events { padding: 0 16px 12px; border-top: 1px solid #F5F5F5; margin-top: 4px; }
+    .card-event-item { font-size: 12px; color: #65657B; padding: 4px 0; border-bottom: 1px solid #F5F5F5; }
+    .card-event-item:last-child { border-bottom: none; }
+    .mitigation-box { background: #F5F3FF; border-left: 3px solid #543FDE; padding: 10px 12px; font-size: 12px; color: #2E2E38; margin: 8px 16px 12px; border-radius: 0 4px 4px 0; }
+    .reasoning-chain { margin: 8px 16px 12px; }
+    .reasoning-step { display: flex; gap: 8px; margin-bottom: 6px; font-size: 12px; color: #65657B; }
+    .reasoning-step-num { width: 20px; height: 20px; border-radius: 50%; background: #E8E6FA; color: #543FDE; font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+
+    /* Alert cards */
+    .alert-card { background: #fff; border: 1px solid #E0E0E0; border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
+    .alert-card-header { padding: 14px 16px; display: flex; gap: 12px; align-items: flex-start; }
+    .alert-type-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 3px; text-transform: uppercase; white-space: nowrap; }
+    .alert-type-regulatory { background: #FEF2F2; color: #C20A29; }
+    .alert-type-weather { background: #EFF6FF; color: #0070CC; }
+    .alert-type-tariff { background: #FFFBEB; color: #D97706; }
+    .alert-type-labor { background: #FFF7ED; color: #E06600; }
+    .alert-type-environmental { background: #F0FDF4; color: #28A464; }
+    .alert-type-operational { background: #F5F3FF; color: #543FDE; }
+    .alert-body { padding: 0 16px 14px; }
+    .alert-description { font-size: 13px; color: #2E2E38; line-height: 1.5; }
+    .alert-source { font-size: 11px; color: #8F8FA3; margin-top: 6px; }
+    .alert-drug-impact { margin-top: 8px; }
+    .alert-action-row { padding: 10px 16px; background: #FAFAFA; border-top: 1px solid #F0F0F0; display: flex; gap: 8px; align-items: center; }
+    .alert-fatigue-header { background: #F5F3FF; border: 1px solid #D3CCF7; border-radius: 6px; padding: 10px 14px; margin-bottom: 16px; font-size: 12px; color: #543FDE; display: flex; align-items: center; gap: 8px; }
+
+    /* Tariff modeler */
+    .scenario-selector { background: #fff; border: 1px solid #E0E0E0; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+    .exposure-bar { height: 8px; border-radius: 4px; background: #E0E0E0; overflow: hidden; margin-top: 4px; }
+    .exposure-bar-fill { height: 100%; background: #543FDE; border-radius: 4px; transition: width 0.4s ease; }
+
+    /* Executive brief */
+    .brief-doc { background: #fff; border: 1px solid #E0E0E0; border-radius: 8px; padding: 28px 32px; max-width: 860px; }
+    .brief-header { border-bottom: 2px solid #543FDE; padding-bottom: 16px; margin-bottom: 24px; }
+    .brief-title { font-size: 20px; font-weight: 700; color: #2E2E38; }
+    .brief-meta { font-size: 12px; color: #8F8FA3; margin-top: 4px; }
+    .brief-section { margin-bottom: 24px; }
+    .brief-section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: #543FDE; margin-bottom: 10px; border-bottom: 1px solid #E8E6FA; padding-bottom: 6px; }
+    .brief-risk-item { display: flex; gap: 12px; padding: 10px 0; border-bottom: 1px solid #F5F5F5; }
+    .brief-risk-rank { width: 24px; height: 24px; border-radius: 50%; background: #C20A29; color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .brief-action-item { display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid #F5F5F5; font-size: 13px; }
+    .brief-action-priority { padding: 2px 8px; border-radius: 3px; font-size: 10px; font-weight: 700; white-space: nowrap; align-self: flex-start; }
+    .brief-action-priority.Critical { background: #FEF2F2; color: #C20A29; }
+    .brief-action-priority.High { background: #FFF7ED; color: #E06600; }
+    .brief-action-priority.Medium { background: #FFFBEB; color: #D97706; }
+
+    /* Audit log */
+    .audit-log { background: #1E1E2E; border-radius: 6px; padding: 12px 16px; font-family: 'Courier New', monospace; font-size: 11px; color: #A8A8C8; max-height: 200px; overflow-y: auto; margin-top: 16px; }
+    .audit-log-entry { padding: 3px 0; border-bottom: 1px solid #2E2E42; }
+    .audit-log-entry:last-child { border-bottom: none; }
+
+    /* API Pending badge */
+    .api-pending-badge { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 3px; background: #FFF3E0; color: #E65100; border: 1px solid #FFB74D; white-space: nowrap; }
+
+    /* Pulse animation for critical markers */
+    @keyframes pulse-ring { 0% { transform: scale(0.5); opacity: 1; } 100% { transform: scale(2.5); opacity: 0; } }
+    .pulse-marker { animation: pulse-ring 1.8s ease-out infinite; }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .tab-pane { padding: 12px; }
+      .stats-row { gap: 8px; }
+      .stat-card { min-width: 100px; padding: 10px 12px; }
+      .brief-doc { padding: 16px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- React -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+  <!-- Day.js -->
+  <script src="https://unpkg.com/dayjs@1.11.10/dayjs.min.js"></script>
+  <script src="https://unpkg.com/dayjs@1.11.10/plugin/relativeTime.js"></script>
+  <script>if(typeof dayjs!=='undefined'&&window.dayjs_plugin_relativeTime){dayjs.extend(window.dayjs_plugin_relativeTime);}</script>
+
+  <!-- Leaflet -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <!-- Mock data -->
+  <script src="mock_data.js"></script>
+
+  <!-- Load antd dynamically (static script tags break UMD this-binding in preview sandbox),
+       then chain-load app.js after antd is confirmed ready. -->
+  <script>
+  (function() {
+    function loadScript(src, onload) {
+      var s = document.createElement('script');
+      s.src = src;
+      s.onload = onload;
+      s.onerror = function() { console.error('Failed to load: ' + src); };
+      document.body.appendChild(s);
+    }
+    loadScript('antd.min.js', function() {
+      loadScript('app.js', function() {});
+    });
+  })();
+  </script>
+
+  <!-- App (placeholder comment — loaded dynamically above) -->
+  <script src="app.js"></script>
+</body>
+</html>
