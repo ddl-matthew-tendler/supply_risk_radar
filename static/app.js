@@ -108,18 +108,19 @@ var useCallback = React.useCallback;
 // ── Domino theme ─────────────────────────────────────────────────────────────
 var dominoTheme = {
   token: {
-    colorPrimary: '#543FDE',
-    colorPrimaryHover: '#3B23D1',
-    colorText: '#2E2E38',
-    colorTextSecondary: '#65657B',
-    colorTextTertiary: '#8F8FA3',
+    colorPrimary: '#3B3BD3',
+    colorPrimaryHover: '#1820A0',
+    colorPrimaryActive: '#1820A0',
+    colorText: '#3F4547',
+    colorTextSecondary: '#7F8385',
+    colorTextTertiary: '#9EA4A6',
     colorSuccess: '#28A464',
     colorWarning: '#CCB718',
     colorError: '#C20A29',
     colorInfo: '#0070CC',
     colorBgContainer: '#FFFFFF',
     colorBgLayout: '#FAFAFA',
-    colorBorder: '#E0E0E0',
+    colorBorder: '#DBE4E8',
     fontFamily: 'Inter, Lato, Helvetica Neue, Arial, sans-serif',
     fontSize: 14,
     borderRadius: 4,
@@ -284,7 +285,7 @@ function WorldMapTab(props) {
         ]
       }),
       h('div', { className: 'map-legend', style: { marginLeft: 'auto' } },
-        h('span', { style: { fontSize: 11, fontWeight: 600, color: '#8F8FA3', marginRight: 4 } }, 'LEGEND:'),
+        h('span', { style: { fontSize: 11, fontWeight: 600, color: '#8F8FA3', marginRight: 4 } }, 'Legend'),
         ['critical', 'high', 'medium', 'low'].map(function(lvl) {
           return h('div', { key: lvl, className: 'legend-item' },
             h('span', { className: 'legend-dot', style: { background: riskColor(lvl) } }),
@@ -307,15 +308,15 @@ function WorldMapTab(props) {
       drawerSupplier ? h('div', null,
         h('div', { style: { display: 'flex', gap: 12, marginBottom: 16 } },
           h('div', { style: { flex: 1 } },
-            h('div', { style: { fontSize: 11, color: '#8F8FA3', fontWeight: 600, textTransform: 'uppercase' } }, 'Risk Score'),
+            h('div', { className: 'section-label' }, 'Risk score'),
             h('div', { className: 'risk-score ' + drawerSupplier.riskLevel }, drawerSupplier.riskScore)
           ),
           h('div', { style: { flex: 1 } },
-            h('div', { style: { fontSize: 11, color: '#8F8FA3', fontWeight: 600, textTransform: 'uppercase' } }, 'Category'),
+            h('div', { className: 'section-label' }, 'Category'),
             h('div', { style: { fontSize: 16, fontWeight: 600, marginTop: 4 } }, drawerSupplier.category)
           ),
           h('div', { style: { flex: 1 } },
-            h('div', { style: { fontSize: 11, color: '#8F8FA3', fontWeight: 600, textTransform: 'uppercase' } }, 'Annual Spend'),
+            h('div', { className: 'section-label' }, 'Annual spend'),
             h('div', { style: { fontSize: 16, fontWeight: 600, marginTop: 4 } }, fmt$(drawerSupplier.spend))
           )
         ),
@@ -338,8 +339,8 @@ function WorldMapTab(props) {
               var dp = (typeof MOCK_DRUG_PRODUCTS !== 'undefined' ? MOCK_DRUG_PRODUCTS : []).find(function(d) { return d.id === dpId; });
               if (!dp) return null;
               return h('div', { key: dpId, style: { display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #F5F5F5', fontSize: 13 } },
-                h('div', null, h('div', { style: { fontWeight: 500 } }, dp.name), h('div', { style: { fontSize: 11, color: '#8F8FA3' } }, dp.therapyArea)),
-                h('div', { style: { textAlign: 'right' } }, h('div', { style: { fontWeight: 600, color: '#C20A29' } }, fmt$(dp.revenue)), h('div', { style: { fontSize: 11, color: '#8F8FA3' } }, 'annual revenue'))
+                h('div', null, h('div', { style: { fontWeight: 500 } }, dp.name), h('div', { style: { fontSize: 11, color: '#7F8385' } }, dp.therapyArea)),
+                h('div', { style: { textAlign: 'right' } }, h('div', { style: { fontWeight: 600, color: '#C20A29' } }, fmt$(dp.revenue)), h('div', { style: { fontSize: 11, color: '#7F8385' } }, 'annual revenue'))
               );
             })
           : h('div', { style: { color: '#8F8FA3', fontSize: 12 } }, 'No drug product linkage'),
@@ -347,8 +348,8 @@ function WorldMapTab(props) {
         drawerSupplier.hsCode ? h('div', null,
           h(Divider, { orientation: 'left', plain: true }, 'Tariff Exposure'),
           h('div', { style: { display: 'flex', gap: 16, fontSize: 13 } },
-            h('div', null, h('div', { style: { color: '#8F8FA3', fontSize: 11 } }, 'HS Code'), h('div', { style: { fontWeight: 600 } }, drawerSupplier.hsCode)),
-            h('div', null, h('div', { style: { color: '#8F8FA3', fontSize: 11 } }, 'Tariff Exposure'), h('div', { style: { fontWeight: 600, color: drawerSupplier.tariffExposure > 0.15 ? '#C20A29' : '#2E2E38' } }, (drawerSupplier.tariffExposure * 100).toFixed(0) + '%'))
+            h('div', null, h('div', { style: { color: '#8F8FA3', fontSize: 11 } }, 'HS code'), h('div', { style: { fontWeight: 600 } }, drawerSupplier.hsCode)),
+            h('div', null, h('div', { style: { color: '#8F8FA3', fontSize: 11 } }, 'Tariff exposure'), h('div', { style: { fontWeight: 600, color: drawerSupplier.tariffExposure > 0.15 ? '#C20A29' : '#3F4547' } }, (drawerSupplier.tariffExposure * 100).toFixed(0) + '%'))
           )
         ) : null
       ) : null
@@ -405,17 +406,16 @@ function WatchlistTab(props) {
     ),
 
     h('div', { style: { display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' } },
-      h('span', { style: { fontSize: 12, color: '#8F8FA3', fontWeight: 600 } }, 'FILTER:'),
       h(Select, {
         value: altFilter, onChange: setAltFilter, style: { width: 200 },
         options: [
-          { label: 'All Alternate Statuses', value: 'all' },
-          { label: 'No Alternate', value: 'None' },
-          { label: 'Alt: In Qualification', value: 'In Qualification' },
-          { label: 'Alternate Qualified', value: 'Qualified' },
+          { label: 'All alternate statuses', value: 'all' },
+          { label: 'No alternate', value: 'None' },
+          { label: 'Alt: in qualification', value: 'In Qualification' },
+          { label: 'Alternate qualified', value: 'Qualified' },
         ]
       }),
-      h('div', { style: { marginLeft: 'auto', fontSize: 12, color: '#8F8FA3' } }, 'Showing ', filtered.length, ' of ', items.length, ' cards today')
+      h('div', { style: { marginLeft: 'auto', fontSize: 12, color: '#7F8385' } }, 'Showing ', filtered.length, ' of ', items.length, ' items')
     ),
 
     filtered.map(function(card) {
@@ -438,18 +438,18 @@ function WatchlistTab(props) {
           ),
           h('div', { className: 'card-actions' },
             h('div', { className: 'risk-score ' + card.riskLevel, style: { fontSize: 22 } }, card.riskScore),
-            h(Button, { size: 'small', type: 'primary', onClick: function() { openActionModal(card); } }, 'Take Action'),
-            h(Button, { size: 'small', onClick: function() { setExpandedId(expanded ? null : card.rank); } }, expanded ? 'Collapse ▲' : 'Details ▼')
+            h(Button, { size: 'small', onClick: function() { openActionModal(card); } }, 'Log action'),
+            h(Button, { size: 'small', type: 'text', onClick: function() { setExpandedId(expanded ? null : card.rank); } }, expanded ? 'Hide details' : 'View details')
           )
         ),
 
         expanded ? h('div', null,
           h('div', { className: 'card-events' },
-            h('div', { style: { fontSize: 11, fontWeight: 600, color: '#8F8FA3', textTransform: 'uppercase', marginBottom: 4 } }, 'Source Events'),
+            h('div', { className: 'section-label' }, 'Source events'),
             card.sourceEvents.map(function(ev, i) { return h('div', { key: i, className: 'card-event-item' }, '• ', ev); })
           ),
           h('div', { style: { padding: '0 16px 8px' } },
-            h('div', { style: { fontSize: 11, fontWeight: 600, color: '#8F8FA3', textTransform: 'uppercase', marginBottom: 4 } }, 'Reasoning Chain'),
+            h('div', { className: 'section-label' }, 'Reasoning chain'),
             h('div', { className: 'reasoning-chain' },
               card.reasoningChain.map(function(step, i) {
                 return h('div', { key: i, className: 'reasoning-step' },
@@ -461,7 +461,7 @@ function WatchlistTab(props) {
             h('div', { style: { fontSize: 11, color: '#8F8FA3', marginTop: 4 } }, 'Confidence: ', h('b', null, Math.round(card.confidence * 100) + '%'))
           ),
           h('div', { style: { padding: '0 0 0 0' } },
-            h('div', { style: { fontSize: 11, fontWeight: 600, color: '#543FDE', textTransform: 'uppercase', padding: '0 16px 4px' } }, 'LLM Mitigation Suggestion'),
+            h('div', { style: { fontSize: 11, fontWeight: 600, color: '#3B3BD3', padding: '0 16px 4px' } }, 'Mitigation suggestion'),
             h('div', { className: 'mitigation-box' }, card.mitigationSuggestion)
           )
         ) : null
@@ -472,32 +472,32 @@ function WatchlistTab(props) {
     h(Modal, {
       open: !!actionModal,
       onCancel: function() { setActionModal(null); },
-      title: actionModal ? 'Log Action — ' + actionModal.supplierName : '',
+      title: actionModal ? 'Log action — ' + actionModal.supplierName : '',
       onOk: function() { form.submit(); },
-      okText: 'Log to Audit Trail',
-      okButtonProps: { type: 'primary' },
+      okText: 'Save action',
     },
       actionModal ? h(Form, { form: form, layout: 'vertical', onFinish: submitAction },
         h('div', { style: { background: '#F5F5F5', borderRadius: 6, padding: '10px 12px', marginBottom: 16, fontSize: 12 } },
           h('div', null, h('b', null, 'Supplier: '), actionModal.supplierName, ' (', actionModal.country, ')'),
           h('div', null, h('b', null, 'Drug: '), actionModal.drugProductName),
-          h('div', null, h('b', null, 'Risk Score: '), actionModal.riskScore, ' · ', h('b', null, 'Revenue at Risk: '), fmt$(actionModal.revenueAtRisk))
+          h('div', null, h('b', null, 'Risk score: '), actionModal.riskScore, ' · ', h('b', null, 'Revenue at risk: '), fmt$(actionModal.revenueAtRisk))
         ),
-        h(Form.Item, { label: 'Action Taken', name: 'action', rules: [{ required: true, message: 'Required' }] },
+        h(Form.Item, { label: 'Action taken', name: 'action', rules: [{ required: true, message: 'Select an action' }] },
           h(Select, {
+            placeholder: 'Select an action...',
             options: [
-              { label: 'Requested CAPA from supplier quality team', value: 'capa_request' },
-              { label: 'Initiated alternate qualification project', value: 'alt_qual' },
-              { label: 'Authorized safety stock build', value: 'safety_stock' },
-              { label: 'Escalated to CPO / Procurement Leadership', value: 'escalated' },
-              { label: 'Engaged regulatory affairs for DMF review', value: 'regulatory' },
-              { label: 'Activated BCP — business continuity protocol', value: 'bcp' },
-              { label: 'Switched order to alternate supplier', value: 'switch' },
-              { label: 'Monitored — no action required', value: 'monitor' },
+              { label: 'Request CAPA from supplier quality team', value: 'capa_request' },
+              { label: 'Initiate alternate qualification project', value: 'alt_qual' },
+              { label: 'Authorize safety stock build', value: 'safety_stock' },
+              { label: 'Escalate to CPO / procurement leadership', value: 'escalated' },
+              { label: 'Engage regulatory affairs for DMF review', value: 'regulatory' },
+              { label: 'Activate BCP — business continuity protocol', value: 'bcp' },
+              { label: 'Switch order to alternate supplier', value: 'switch' },
+              { label: 'Monitor — no action required', value: 'monitor' },
             ]
           })
         ),
-        h(Form.Item, { label: 'Rationale (required for audit)', name: 'rationale', rules: [{ required: true, message: 'Rationale is required for audit trail' }] },
+        h(Form.Item, { label: 'Rationale', name: 'rationale', rules: [{ required: true, message: 'Rationale is required for the audit trail' }] },
           h(Input.TextArea, { rows: 3, placeholder: 'Describe why this action was taken and what data informed the decision...' })
         )
       ) : null
@@ -598,33 +598,33 @@ function AlertsTab(props) {
         h('div', { className: 'alert-card-header' },
           h('div', null,
             h('span', { className: 'alert-type-badge ' + typeClass(alert.type) }, alert.type),
-            h('div', { style: { fontWeight: 600, fontSize: 14, color: '#2E2E38', marginTop: 6 } }, alert.title),
-            h('div', { style: { fontSize: 12, color: '#65657B', marginTop: 2 } }, countryFlag(alert.supplierName.includes('India') || alert.supplierName.includes('Laurus') || alert.supplierName.includes('Aurobindo') || alert.supplierName.includes('Divi') || alert.supplierName.includes('Sun') ? 'India' : alert.supplierName.includes('Zhejiang') || alert.supplierName.includes('Hisun') || alert.supplierName.includes('Jiangsu') ? 'China' : alert.supplierName.includes('Lonza') ? 'Switzerland' : alert.supplierName.includes('Almac') ? 'UK' : ''), ' ', alert.supplierName, ' · ', alert.date)
+            h('div', { style: { fontWeight: 600, fontSize: 14, color: '#3F4547', marginTop: 6 } }, alert.title),
+            h('div', { style: { fontSize: 12, color: '#7F8385', marginTop: 2 } }, countryFlag(alert.supplierName.includes('India') || alert.supplierName.includes('Laurus') || alert.supplierName.includes('Aurobindo') || alert.supplierName.includes('Divi') || alert.supplierName.includes('Sun') ? 'India' : alert.supplierName.includes('Zhejiang') || alert.supplierName.includes('Hisun') || alert.supplierName.includes('Jiangsu') ? 'China' : alert.supplierName.includes('Lonza') ? 'Switzerland' : alert.supplierName.includes('Almac') ? 'UK' : ''), ' ', alert.supplierName, ' · ', alert.date)
           ),
           h('div', { style: { marginLeft: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 } },
-            h(Tag, { color: alert.severity === 'critical' ? 'error' : alert.severity === 'high' ? 'warning' : 'default' }, alert.severity.toUpperCase()),
+            h(Tag, { color: alert.severity === 'critical' ? 'error' : alert.severity === 'high' ? 'warning' : 'default' }, alert.severity.charAt(0).toUpperCase() + alert.severity.slice(1)),
             alert.reviewedAt ? h(Tag, { color: 'success', style: { fontSize: 10 } }, '✓ Reviewed') : null
           )
         ),
         h('div', { className: 'alert-body' },
           h('div', { className: 'alert-description' }, alert.description),
-          h('div', { className: 'alert-source' }, '📎 Source: ', alert.sourceLabel, alert.sourceUrl ? h('a', { href: '#', style: { marginLeft: 4, color: '#543FDE' }, onClick: function(e) { e.preventDefault(); message.info('Source: ' + alert.sourceLabel); } }, '[View Source]') : null),
+          h('div', { className: 'alert-source' }, 'Source: ', alert.sourceLabel, alert.sourceUrl ? h('a', { href: '#', style: { marginLeft: 4, color: '#3B3BD3' }, onClick: function(e) { e.preventDefault(); message.info('Source: ' + alert.sourceLabel); } }, 'View source') : null),
           alert.drugImpact && alert.drugImpact.length > 0 ? h('div', { className: 'alert-drug-impact' },
-            h('div', { style: { fontSize: 11, fontWeight: 600, color: '#8F8FA3', textTransform: 'uppercase', marginBottom: 4, marginTop: 8 } }, 'Drug Product Impact'),
+            h('div', { className: 'section-label', style: { marginTop: 8 } }, 'Drug products affected'),
             alert.drugImpact.map(function(d, i) { return h('div', { key: i, style: { fontSize: 12, color: '#C20A29', fontWeight: 500 } }, '⚠ ', d); })
           ) : null
         ),
         h('div', { className: 'alert-action-row' },
-          h(Button, { size: 'small', type: 'primary', onClick: function() { setActionModal(alert); form.resetFields(); } }, 'Take Action'),
-          h(Button, { size: 'small', onClick: function() { markReviewed(alert.id); } }, alert.reviewedAt ? '✓ Reviewed' : 'Mark Reviewed'),
-          h(Button, { size: 'small', danger: true, onClick: function() { dismiss(alert.id); } }, 'Dismiss'),
+          h(Button, { size: 'small', onClick: function() { setActionModal(alert); form.resetFields(); } }, 'Log action'),
+          h(Button, { size: 'small', type: 'text', onClick: function() { markReviewed(alert.id); } }, alert.reviewedAt ? '✓ Reviewed' : 'Mark reviewed'),
+          h(Button, { size: 'small', type: 'text', danger: true, onClick: function() { dismiss(alert.id); } }, 'Dismiss'),
           h('div', { style: { marginLeft: 'auto', fontSize: 11, color: '#8F8FA3' } }, 'Confidence: ', h('b', null, Math.round((alert.confidence || 0.8) * 100) + '%'))
         )
       );
     }),
 
     auditLog.length > 0 ? h('div', { style: { marginTop: 24 } },
-      h('div', { style: { fontSize: 12, fontWeight: 600, color: '#8F8FA3', textTransform: 'uppercase', marginBottom: 6 } }, '🔒 Audit Log (localStorage)'),
+      h('div', { className: 'section-label', style: { marginBottom: 6 } }, 'Audit log'),
       h('div', { className: 'audit-log' },
         auditLog.slice().reverse().map(function(entry, i) {
           return h('div', { key: i, className: 'audit-log-entry' },
@@ -641,26 +641,26 @@ function AlertsTab(props) {
     h(Modal, {
       open: !!actionModal,
       onCancel: function() { setActionModal(null); },
-      title: actionModal ? 'Log Action — ' + (actionModal.title || '') : '',
+      title: actionModal ? 'Log action — ' + (actionModal.title || '') : '',
       onOk: function() { form.submit(); },
-      okText: 'Log to Audit Trail',
+      okText: 'Save action',
     },
       actionModal ? h(Form, { form: form, layout: 'vertical', onFinish: submitAction },
         h('div', { style: { background: '#F5F5F5', borderRadius: 6, padding: '10px 12px', marginBottom: 16, fontSize: 12 } },
           h('div', null, h('b', null, 'Alert: '), actionModal.title),
           h('div', null, h('b', null, 'Supplier: '), actionModal.supplierName)
         ),
-        h(Form.Item, { label: 'Action Taken', name: 'action', rules: [{ required: true }] },
-          h(Select, { options: [
-            { label: 'Requested CAPA from supplier', value: 'capa' },
-            { label: 'Initiated alternate qualification', value: 'alt_qual' },
-            { label: 'Authorized safety stock build', value: 'safety_stock' },
-            { label: 'Escalated to leadership', value: 'escalated' },
-            { label: 'Monitored — no action', value: 'monitor' },
+        h(Form.Item, { label: 'Action taken', name: 'action', rules: [{ required: true, message: 'Select an action' }] },
+          h(Select, { placeholder: 'Select an action...', options: [
+            { label: 'Request CAPA from supplier', value: 'capa' },
+            { label: 'Initiate alternate qualification', value: 'alt_qual' },
+            { label: 'Authorize safety stock build', value: 'safety_stock' },
+            { label: 'Escalate to leadership', value: 'escalated' },
+            { label: 'Monitor — no action required', value: 'monitor' },
           ]})
         ),
-        h(Form.Item, { label: 'Rationale', name: 'rationale', rules: [{ required: true }] },
-          h(Input.TextArea, { rows: 3, placeholder: 'Audit rationale...' })
+        h(Form.Item, { label: 'Rationale', name: 'rationale', rules: [{ required: true, message: 'Rationale is required for the audit trail' }] },
+          h(Input.TextArea, { rows: 3, placeholder: 'Describe why this action was taken and what data informed the decision...' })
         )
       ) : null
     )
@@ -691,24 +691,23 @@ function TariffTab(props) {
     { title: 'HS Code', dataIndex: 'hsCode', key: 'hs', width: 100 },
     { title: 'Annual Spend', dataIndex: 'annualSpend', key: 'spend', width: 130, sorter: function(a, b) { return a.annualSpend - b.annualSpend; }, render: function(v) { return fmt$(v); } },
     { title: 'Current Rate', dataIndex: 'currentRate', key: 'curr', width: 110, render: function(v) { return (v * 100).toFixed(0) + '%'; } },
-    { title: 'Scenario Rate', dataIndex: 'scenarioRate', key: 'scen', width: 120, render: function(v) { return h('span', { style: { fontWeight: 600, color: v > 0 ? '#C20A29' : '#2E2E38' } }, (v * 100).toFixed(0) + '%'); } },
-    { title: 'COGS Delta', dataIndex: 'delta', key: 'delta', width: 130, sorter: function(a, b) { return a.delta - b.delta; }, render: function(v) { return h('span', { style: { fontWeight: 700, color: v > 0 ? '#C20A29' : '#28A464' } }, v > 0 ? '+' + fmt$(v) : fmt$(v)); } },
+    { title: 'Scenario rate', dataIndex: 'scenarioRate', key: 'scen', width: 120, render: function(v) { return h('span', { style: { fontWeight: 600, color: v > 0 ? '#C20A29' : '#3F4547' } }, (v * 100).toFixed(0) + '%'); } },
+    { title: 'COGS delta', dataIndex: 'delta', key: 'delta', width: 130, sorter: function(a, b) { return a.delta - b.delta; }, render: function(v) { return h('span', { style: { fontWeight: 700, color: v > 0 ? '#C20A29' : '#28A464' } }, v > 0 ? '+' + fmt$(v) : fmt$(v)); } },
   ];
 
   return h('div', { className: 'tab-pane' },
     h('div', { className: 'scenario-selector' },
-      h('div', { style: { fontSize: 12, fontWeight: 600, color: '#8F8FA3', textTransform: 'uppercase', marginBottom: 8 } }, 'Select Tariff Scenario'),
+      h('div', { className: 'section-label', style: { marginBottom: 8 } }, 'Select tariff scenario'),
       h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
         scenarios.map(function(s) {
-          return h(Button, {
+          return h('button', {
             key: s.id,
-            type: scenarioId === s.id ? 'primary' : 'default',
+            className: 'scenario-btn' + (scenarioId === s.id ? ' active' : ''),
             onClick: function() { setScenarioId(s.id); },
-            size: 'small',
           }, s.scenarioName);
         })
       ),
-      h('div', { style: { marginTop: 10, fontSize: 12, color: '#65657B' } }, scenario.description)
+      h('div', { style: { marginTop: 10, fontSize: 12, color: '#7F8385' } }, scenario.description)
     ),
 
     h('div', { className: 'stats-row' },
@@ -724,11 +723,11 @@ function TariffTab(props) {
         scenario.byDrugProduct.filter(function(d) { return d.exposure >= 0; }).sort(function(a, b) { return b.exposure - a.exposure; }).map(function(dp) {
           return h('div', { key: dp.productId, style: { marginBottom: 12 } },
             h('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 } },
-              h('span', { style: { fontWeight: 500 } }, dp.productName),
+              h('span', { style: { fontWeight: 500, color: '#3F4547' } }, dp.productName),
               h('span', { style: { fontWeight: 700, color: dp.exposure > 0 ? '#C20A29' : '#28A464' } }, dp.exposure > 0 ? '+' + fmt$(dp.exposure) + '/yr' : '$0')
             ),
             h('div', { className: 'exposure-bar' },
-              h('div', { className: 'exposure-bar-fill', style: { width: (dp.exposure / maxExposure * 100) + '%', background: dp.exposure > 5000000 ? '#C20A29' : dp.exposure > 1000000 ? '#E06600' : '#543FDE' } })
+              h('div', { className: 'exposure-bar-fill', style: { width: (dp.exposure / maxExposure * 100) + '%', background: dp.exposure > 5000000 ? '#C20A29' : dp.exposure > 1000000 ? '#E06600' : '#3B3BD3' } })
             ),
             dp.cogsDelta > 0 ? h('div', { style: { fontSize: 11, color: '#8F8FA3', marginTop: 2 } }, 'COGS impact: +' + dp.cogsDelta.toFixed(2) + '%') : null
           );
@@ -772,15 +771,15 @@ function ExecBriefTab(props) {
 
   return h('div', { className: 'tab-pane' },
     h('div', { style: { display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' } },
-      h(Button, { type: 'primary', onClick: regenerate, loading: loading }, '↻ Regenerate Brief'),
+      h(Button, { type: 'primary', onClick: regenerate, loading: loading }, 'Regenerate brief'),
       h(Tooltip, { title: API_GAPS.distributeBrief.message },
         h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 6 } },
-          h(Button, { disabled: true }, 'Approve & Distribute'),
+          h(Button, { disabled: true }, 'Approve and distribute'),
           h(ApiPendingBadge)
         )
       ),
       h('div', { style: { marginLeft: 'auto', fontSize: 12, color: '#8F8FA3' } },
-        '🤖 Auto-generated ', dayjs(currentBrief.generatedAt).fromNow(), ' · Week ending ', currentBrief.weekEnding
+        'Auto-generated ', dayjs(currentBrief.generatedAt).fromNow(), ' · Week ending ', currentBrief.weekEnding
       )
     ),
 
@@ -793,18 +792,18 @@ function ExecBriefTab(props) {
       ),
 
       h('div', { className: 'brief-section' },
-        h('div', { className: 'brief-section-title' }, 'Week Summary'),
-        h('div', { style: { fontSize: 14, color: '#2E2E38', lineHeight: 1.6 } }, currentBrief.weekSummary)
+        h('div', { className: 'brief-section-title' }, 'Week summary'),
+        h('div', { style: { fontSize: 14, color: '#3F4547', lineHeight: 1.6 } }, currentBrief.weekSummary)
       ),
 
       h('div', { className: 'brief-section' },
-        h('div', { className: 'brief-section-title' }, 'Top 5 Risks This Week'),
+        h('div', { className: 'brief-section-title' }, 'Top 5 risks this week'),
         currentBrief.top5Risks.map(function(risk) {
           return h('div', { key: risk.rank, className: 'brief-risk-item' },
             h('div', { className: 'brief-risk-rank', style: { background: risk.rank <= 2 ? '#C20A29' : risk.rank <= 4 ? '#E06600' : '#CCB718' } }, risk.rank),
             h('div', { style: { flex: 1 } },
-              h('div', { style: { fontWeight: 600, fontSize: 13, color: '#2E2E38' } }, risk.headline),
-              h('div', { style: { fontSize: 12, color: '#65657B', marginTop: 2 } }, risk.impact),
+              h('div', { style: { fontWeight: 600, fontSize: 13, color: '#3F4547' } }, risk.headline),
+              h('div', { style: { fontSize: 12, color: '#7F8385', marginTop: 2 } }, risk.impact),
               h(Tag, { color: risk.urgency.startsWith('Act') ? 'error' : 'warning', style: { fontSize: 10, marginTop: 4 } }, risk.urgency)
             )
           );
@@ -812,12 +811,12 @@ function ExecBriefTab(props) {
       ),
 
       h('div', { className: 'brief-section' },
-        h('div', { className: 'brief-section-title' }, 'Actions Required'),
+        h('div', { className: 'brief-section-title' }, 'Actions required'),
         currentBrief.actionsRequired.map(function(action, i) {
           return h('div', { key: i, className: 'brief-action-item' },
             h('span', { className: 'brief-action-priority ' + action.priority }, action.priority),
             h('div', { style: { flex: 1 } },
-              h('div', { style: { fontWeight: 500 } }, action.action),
+              h('div', { style: { fontWeight: 500, color: '#3F4547' } }, action.action),
               h('div', { style: { fontSize: 12, color: '#8F8FA3', marginTop: 2 } }, 'Owner: ', action.owner, ' · Due: ', action.dueDate)
             )
           );
@@ -825,16 +824,16 @@ function ExecBriefTab(props) {
       ),
 
       h('div', { className: 'brief-section' },
-        h('div', { className: 'brief-section-title' }, 'Tariff Exposure Summary'),
-        h('div', { style: { fontSize: 13, color: '#2E2E38', lineHeight: 1.6 } }, currentBrief.tariffExposureSummary)
+        h('div', { className: 'brief-section-title' }, 'Tariff exposure summary'),
+        h('div', { style: { fontSize: 13, color: '#3F4547', lineHeight: 1.6 } }, currentBrief.tariffExposureSummary)
       ),
 
       h('div', { className: 'brief-section' },
-        h('div', { className: 'brief-section-title' }, 'Trend Analysis'),
-        h('div', { style: { fontSize: 13, color: '#2E2E38', lineHeight: 1.6 } }, currentBrief.trendAnalysis)
+        h('div', { className: 'brief-section-title' }, 'Trend analysis'),
+        h('div', { style: { fontSize: 13, color: '#3F4547', lineHeight: 1.6 } }, currentBrief.trendAnalysis)
       ),
 
-      h('div', { style: { marginTop: 24, padding: '12px 0', borderTop: '1px solid #E0E0E0', fontSize: 11, color: '#8F8FA3' } },
+      h('div', { style: { marginTop: 24, padding: '12px 0', borderTop: '1px solid #DBE4E8', fontSize: 11, color: '#8F8FA3' } },
         'This brief was auto-generated by SupplyRiskRadar using AI-assisted synthesis of public risk signals and internal BOM/AVL data. All assertions are source-cited. Procurement leads should review before distribution. Not for trading-desk use.'
       )
     )
@@ -901,10 +900,10 @@ function DebugPanel(props) {
 
   var triggerStyle = {
     position: 'fixed', bottom: 8, right: 8, zIndex: 9999,
-    background: '#1A1A2E', border: '1px solid #543FDE', borderRadius: 6,
-    padding: '4px 10px', fontSize: 11, color: '#7A6EF0', cursor: 'pointer',
+    background: '#1A1A2E', border: '1px solid #3B3BD3', borderRadius: 6,
+    padding: '4px 10px', fontSize: 11, color: '#7A7AEE', cursor: 'pointer',
     fontFamily: "'Courier New', monospace", userSelect: 'none',
-    boxShadow: '0 2px 8px rgba(84,63,222,0.3)',
+    boxShadow: '0 2px 8px rgba(59,59,211,0.3)',
   };
 
   if (!open) {
@@ -915,7 +914,7 @@ function DebugPanel(props) {
 
   var tabBtnStyle = function(t) { return {
     padding: '4px 12px', fontSize: 11, cursor: 'pointer', border: 'none',
-    background: tab === t ? '#543FDE' : 'transparent',
+    background: tab === t ? '#3B3BD3' : 'transparent',
     color: tab === t ? '#fff' : '#8080A0',
     borderRadius: 4, fontFamily: "'Courier New', monospace",
   }; };
@@ -923,7 +922,7 @@ function DebugPanel(props) {
   return h('div', { style: panelStyle },
     // Header bar
     h('div', { style: { background: '#0D0D1A', padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 8, borderBottom: '1px solid #2A2A4A', flexShrink: 0 } },
-      h('span', { style: { color: '#7A6EF0', fontWeight: 700, fontSize: 12 } }, '⬡ SupplyRiskRadar Debug'),
+      h('span', { style: { color: '#7A7AEE', fontWeight: 700, fontSize: 12 } }, '⬡ SupplyRiskRadar Debug'),
       h('span', { style: { fontSize: 10, color: '#4A4A6A', marginLeft: 4 } }, 'Ctrl+Shift+D'),
       h('button', { style: tabBtnStyle('globals'), onClick: function() { setTab('globals'); } }, 'Globals'),
       h('button', { style: tabBtnStyle('logs'), onClick: function() { setTab('logs'); } }, 'Console (' + logs.length + ')'),
@@ -1036,7 +1035,7 @@ function DebugPanel(props) {
             return h('div', { key: i, style: { padding: '6px 0', borderBottom: '1px solid #1E1E3A', fontSize: 11 } },
               h('div', { style: { display: 'flex', gap: 8 } },
                 h('span', { style: { color: '#4A4A6A' } }, entry.timestamp ? entry.timestamp.slice(0,19).replace('T',' ') : ''),
-                h('span', { style: { color: '#7A6EF0' } }, entry.type)
+                h('span', { style: { color: '#7A7AEE' } }, entry.type)
               ),
               h('div', { style: { color: '#A8C4E0', marginTop: 2 } }, entry.supplier + (entry.alertTitle ? ' · ' + entry.alertTitle : '')),
               h('div', { style: { color: '#80D4B0', marginTop: 2 } }, 'Action: ' + (entry.action || '—')),
