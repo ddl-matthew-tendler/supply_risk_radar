@@ -196,7 +196,7 @@ function actionImpact(action) {
     bcp:          { delta: 18, note: 'BCP activated' },
     escalated:    { delta: 10, note: 'Escalated to leadership' },
     regulatory:   { delta: 12, note: 'Regulatory affairs engaged' },
-    monitor:      { delta: 3,  note: 'Monitoring — no change' },
+    monitor:      { delta: 0,  note: 'Monitoring only - no mitigation applied' },
   };
   return map[action] || { delta: 5, note: 'Action logged' };
 }
@@ -654,7 +654,17 @@ function WorldMapTab(props) {
     try { hcMap.current.series[1].setData(points, true, { duration: 400 }); } catch(e) {}
   }, [filtered, mapReady]);
 
+  var _hint = useState(function() { try { return localStorage.getItem('srr_hint_dismissed') !== '1'; } catch(e) { return true; } });
+  var showHint = _hint[0]; var setShowHint = _hint[1];
+  function dismissHint() { setShowHint(false); try { localStorage.setItem('srr_hint_dismissed', '1'); } catch(e) {} }
+
   return h('div', { className: 'tab-pane' },
+    showHint ? h(Alert, {
+      type: 'info', showIcon: true, closable: true, onClose: dismissHint,
+      style: { marginBottom: 12 },
+      message: 'Start here: click a pulsing red bubble on the map to see the supplier, then investigate the underlying signals.'
+    }) : null,
+
     h('div', { className: 'stats-row' },
       h(StatCard, { label: 'Critical', value: stats.critical, color: 'danger', active: riskFilter === 'critical', onClick: function() { setRiskFilter(riskFilter === 'critical' ? 'All' : 'critical'); } }),
       h(StatCard, { label: 'High Risk', value: stats.high, color: 'warning', active: riskFilter === 'high', onClick: function() { setRiskFilter(riskFilter === 'high' ? 'All' : 'high'); } }),
@@ -686,10 +696,6 @@ function WorldMapTab(props) {
           { label: 'Low', value: 'low' },
         ]
       }),
-      h('div', { style: { fontSize: 11, color: '#7F8385', lineHeight: 1.4, maxWidth: 420 } },
-        h('b', null, 'In pharma supply chains: '),
-        'API = active pharmaceutical ingredient (the drug molecule), KSM = key starting material (upstream input), CMO = contract manufacturer.'
-      ),
       h('div', { className: 'map-legend', style: { marginLeft: 'auto' } },
         h('span', { style: { fontSize: 11, fontWeight: 600, color: '#8F8FA3', marginRight: 4 } }, 'Legend'),
         ['critical', 'high', 'medium', 'low'].map(function(lvl) {
@@ -710,22 +716,40 @@ function WorldMapTab(props) {
       title: drawerSupplier ? h('span', null, countryFlag(drawerSupplier.country), ' ', drawerSupplier.name) : '',
       width: 420,
       extra: drawerSupplier ? h(Tag, { color: drawerSupplier.riskLevel === 'critical' ? 'error' : drawerSupplier.riskLevel === 'high' ? 'warning' : drawerSupplier.riskLevel === 'low' ? 'success' : 'default' }, 'Risk: ' + (drawerSupplier.riskScore || '-')) : null,
-      footer: drawerSupplier ? h('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: 8 } },
-        h(Button, { onClick: function() { setDrawerSupplier(null); } }, 'Close'),
-        h(Button, { type: 'primary', onClick: function() { setDrawerActionOpen(true); drawerForm.resetFields(); } }, 'Take action')
-      ) : null,
+      footer: drawerSupplier ? (function() {
+        var alertCt = (props.alerts || []).filter(function(a) { return a.supplierId === drawerSupplier.id && !a.dismissedAt; }).length;
+        var wlCt = (props.watchlist || []).filter(function(c) { return c.supplierId === drawerSupplier.id; }).length;
+        return h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 } },
+          h('div', { style: { fontSize: 11, color: '#7F8385' } },
+            alertCt + ' open alert' + (alertCt === 1 ? '' : 's') + ' · ' + wlCt + ' watchlist entr' + (wlCt === 1 ? 'y' : 'ies')
+          ),
+          h('div', { style: { display: 'flex', gap: 12, alignItems: 'center' } },
+            h(Button, { type: 'link', size: 'small', style: { padding: 0 }, onClick: function() { setDrawerActionOpen(true); drawerForm.resetFields(); } }, 'Log a general action'),
+            h(Button, {
+              type: 'primary',
+              disabled: alertCt === 0 && wlCt === 0,
+              onClick: function() {
+                var dest = alertCt > 0 ? 'alerts' : 'watchlist';
+                if (props.onInvestigate) props.onInvestigate(drawerSupplier.id, dest);
+                setDrawerSupplier(null);
+              }
+            }, 'Investigate signals')
+          )
+        );
+      })() : null,
     },
       drawerSupplier ? h('div', null,
         drawerSupplier.actionTakenAt ? h(Alert, {
           type: 'success', showIcon: true,
-          message: 'Mitigation logged',
-          description: 'Risk score dropped to ' + drawerSupplier.riskScore + '. ' + (actionImpact(drawerSupplier.lastAction).note) + '.',
+          message: actionImpact(drawerSupplier.lastAction).note,
+          description: 'Risk score now ' + drawerSupplier.riskScore + ' (down ' + actionImpact(drawerSupplier.lastAction).delta + '). Action logged to the governed audit Dataset.',
           style: { marginBottom: 12 }
         }) : null,
         h('div', { style: { display: 'flex', gap: 12, marginBottom: 16 } },
           h('div', { style: { flex: 1 } },
             h('div', { className: 'section-label' }, 'Risk score'),
-            h('div', { className: 'risk-score ' + drawerSupplier.riskLevel }, drawerSupplier.riskScore)
+            h('div', { className: 'risk-score ' + drawerSupplier.riskLevel }, drawerSupplier.riskScore),
+            h('div', { style: { fontSize: 10, color: '#8F8FA3', marginTop: 2, lineHeight: 1.35 } }, '0-100 composite of regulatory, weather, tariff, labor, operational signals')
           ),
           h('div', { style: { flex: 1 } },
             h('div', { className: 'section-label' }, 'Category'),
@@ -765,7 +789,7 @@ function WorldMapTab(props) {
         drawerSupplier.hsCode ? h('div', null,
           h(Divider, { orientation: 'left', plain: true }, 'Tariff Exposure'),
           h('div', { style: { display: 'flex', gap: 16, fontSize: 13 } },
-            h('div', null, h('div', { style: { color: '#8F8FA3', fontSize: 11 } }, 'HS code'), h('div', { style: { fontWeight: 600 } }, drawerSupplier.hsCode)),
+            h('div', null, h('div', { style: { color: '#8F8FA3', fontSize: 11 } }, 'HS code (tariff classification)'), h('div', { style: { fontWeight: 600 } }, drawerSupplier.hsCode)),
             h('div', null, h('div', { style: { color: '#8F8FA3', fontSize: 11 } }, 'Tariff exposure'), h('div', { style: { fontWeight: 600, color: drawerSupplier.tariffExposure > 0.15 ? '#C20A29' : '#3F4547' } }, (drawerSupplier.tariffExposure * 100).toFixed(0) + '%'))
           )
         ) : null
@@ -820,11 +844,14 @@ function WatchlistTab(props) {
   var _form = Form.useForm(); var form = _form[0];
 
   var filtered = useMemo(function() {
-    if (altFilter === 'all') return items;
-    return items.filter(function(c) { return c.alternateStatus === altFilter; });
-  }, [items, altFilter]);
+    var base = items;
+    if (props.supplierFocus) base = base.filter(function(c) { return c.supplierId === props.supplierFocus; });
+    if (altFilter === 'all') return base;
+    return base.filter(function(c) { return c.alternateStatus === altFilter; });
+  }, [items, altFilter, props.supplierFocus]);
 
   var unreviewed = useMemo(function() { return items.filter(function(c) { return !c.reviewedAt; }).length; }, [items]);
+  var focusedSupplier = props.supplierFocus && props.suppliers ? props.suppliers.find(function(s) { return s.id === props.supplierFocus; }) : null;
 
   function markReviewed(card) {
     setItems(function(prev) {
@@ -888,6 +915,12 @@ function WatchlistTab(props) {
       h(StatCard, { label: 'No Alternate', value: items.filter(function(c) { return c.alternateStatus === 'None'; }).length, color: 'warning', sub: 'Sole-source exposure' }),
       h(StatCard, { label: 'Revenue at Risk', value: fmt$(items.reduce(function(s, c) { return s + (c.revenueAtRisk || 0); }, 0)), color: 'danger' })
     ),
+
+    focusedSupplier ? h(Alert, {
+      type: 'info', showIcon: true, style: { marginBottom: 12 },
+      message: h('span', null, 'Scoped to ', h('b', null, focusedSupplier.name), ' from the map. Showing only watchlist entries for this supplier.'),
+      action: h(Button, { size: 'small', type: 'text', onClick: props.clearSupplierFocus }, 'Clear filter')
+    }) : null,
 
     h('div', { style: { display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' } },
       h(Select, {
@@ -1011,9 +1044,12 @@ function AlertsTab(props) {
     return items.filter(function(a) {
       return (typeFilter === 'All' || a.type === typeFilter) &&
              (sevFilter === 'All' || a.severity === sevFilter) &&
+             (!props.supplierFocus || a.supplierId === props.supplierFocus) &&
              !a.dismissedAt;
     });
-  }, [items, typeFilter, sevFilter]);
+  }, [items, typeFilter, sevFilter, props.supplierFocus]);
+
+  var focusedSupplier = props.supplierFocus && props.suppliers ? props.suppliers.find(function(s) { return s.id === props.supplierFocus; }) : null;
 
   var types = useMemo(function() {
     var t = {}; alerts.forEach(function(a) { t[a.type] = true; }); return Object.keys(t);
@@ -1069,6 +1105,12 @@ function AlertsTab(props) {
   }
 
   return h('div', { className: 'tab-pane' },
+    focusedSupplier ? h(Alert, {
+      type: 'info', showIcon: true, style: { marginBottom: 12 },
+      message: h('span', null, 'Scoped to ', h('b', null, focusedSupplier.name), ' from the map. Showing only signals for this supplier - review the reasoning and source citations, then log an action on any alert below.'),
+      action: h(Button, { size: 'small', type: 'text', onClick: props.clearSupplierFocus }, 'Clear filter')
+    }) : null,
+
     h('div', { className: 'alert-fatigue-header' },
       h('span', null, h('b', null, filtered.length + ' alerts today'), '. Calibrated to 3 to 7 high-signal events per user per day. Every alert is mapped to the affected ingredient and drug product, with source citations.')
     ),
@@ -1096,8 +1138,7 @@ function AlertsTab(props) {
       }),
       h(Tooltip, { title: API_GAPS.bulkDismiss.message },
         h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 6 } },
-          h(Button, { size: 'small', disabled: true }, 'Bulk Dismiss'),
-          h(ApiPendingBadge)
+          h(Button, { size: 'small', disabled: true }, 'Bulk Dismiss')
         )
       )
     ),
@@ -1738,6 +1779,14 @@ function App() {
   var _fbTick = useState(0); var feedbackTick = _fbTick[0]; var setFeedbackTick = _fbTick[1];
   function bumpFeedback() { setFeedbackTick(function(t) { return t + 1; }); }
 
+  // Cross-tab focus: when a user investigates a supplier from the map, we
+  // jump to a destination tab with this supplier pre-filtered.
+  var _sf = useState(null); var supplierFocus = _sf[0]; var setSupplierFocus = _sf[1];
+  function investigateSupplier(supplierId, destTab) {
+    setSupplierFocus(supplierId);
+    setActiveTab(destTab || 'alerts');
+  }
+
   useEffect(function() {
     fetch('/api/me').then(function(r) { return r.ok ? r.json() : null; })
       .then(function(d) { if (d) setMe(d); }).catch(function() {});
@@ -1791,17 +1840,17 @@ function App() {
     {
       key: 'map',
       label: h('span', null, 'World Map'),
-      children: loading ? h('div', { style: { textAlign: 'center', padding: 60 } }, h(Spin, { size: 'large' })) : h(WorldMapTab, { suppliers: suppliers, setSuppliers: setSuppliers, role: role, user: userObj, onActionLogged: bumpFeedback }),
+      children: loading ? h('div', { style: { textAlign: 'center', padding: 60 } }, h(Spin, { size: 'large' })) : h(WorldMapTab, { suppliers: suppliers, setSuppliers: setSuppliers, alerts: alerts, watchlist: watchlist, onInvestigate: investigateSupplier, role: role, user: userObj, onActionLogged: bumpFeedback }),
     },
     {
       key: 'watchlist',
       label: h('span', null, 'Daily Watchlist', unreviewed > 0 ? h(Badge, { count: unreviewed, size: 'small', style: { marginLeft: 6, background: '#C20A29' } }) : null),
-      children: h(WatchlistTab, { watchlist: watchlist, setWatchlist: setWatchlist, setSuppliers: setSuppliers, role: role, user: userObj, onActionLogged: bumpFeedback }),
+      children: h(WatchlistTab, { watchlist: watchlist, setWatchlist: setWatchlist, setSuppliers: setSuppliers, supplierFocus: supplierFocus, clearSupplierFocus: function() { setSupplierFocus(null); }, suppliers: suppliers, role: role, user: userObj, onActionLogged: bumpFeedback }),
     },
     {
       key: 'alerts',
       label: h('span', null, 'Alerts', activeAlerts > 0 ? h(Badge, { count: activeAlerts, size: 'small', style: { marginLeft: 6 } }) : null),
-      children: h(AlertsTab, { alerts: roleFilteredAlerts, setAlerts: setAlerts, setSuppliers: setSuppliers, role: role, user: userObj, onActionLogged: bumpFeedback }),
+      children: h(AlertsTab, { alerts: roleFilteredAlerts, setAlerts: setAlerts, setSuppliers: setSuppliers, supplierFocus: supplierFocus, clearSupplierFocus: function() { setSupplierFocus(null); }, suppliers: suppliers, role: role, user: userObj, onActionLogged: bumpFeedback }),
     },
     {
       key: 'tariff',
@@ -1845,16 +1894,6 @@ function App() {
             ),
             h('div', { className: 'search-card-right' },
               h('div', { style: { fontSize: 12, color: '#65657B' } }, suppliers.length + ' suppliers monitored'),
-              h(Tooltip, { title: API_GAPS.ssoRbac.message },
-                h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 6 } },
-                  h('span', { style: { fontSize: 12, color: '#65657B' } }, 'View as'),
-                  h(Select, {
-                    size: 'small', value: role, onChange: setRole, style: { minWidth: 180 },
-                    options: APP_ROLES.map(function(r) { return { label: r.label, value: r.id, title: r.scope }; })
-                  }),
-                  h(ApiPendingBadge)
-                )
-              ),
               !connected ? h('div', { className: 'dummy-data-toggle', style: { color: '#65657B' } },
                 h('span', null, 'Dummy data'),
                 h(Switch, { checked: useDummy, onChange: handleToggle, size: 'small' })
