@@ -160,6 +160,41 @@
     .about-row-body { flex: 1; color: #65657B; font-size: 12.5px; }
     .about-footer-note { font-size: 12px; color: #65657B; font-style: italic; margin: 12px 0 0; }
 
+    /* Agent system */
+    .agent-toolbar { display: flex; align-items: flex-start; gap: 12px; background: #FAFAFB; border: 1px solid #E7E7EE; border-radius: 8px; padding: 10px 12px; margin: 4px 0 12px; }
+    .agent-toolbar-label { display: flex; flex-direction: column; min-width: 72px; padding-top: 2px; }
+    .agent-toolbar-label-text { font-size: 11px; font-weight: 700; color: #3F4547; text-transform: uppercase; letter-spacing: 0.5px; }
+    .agent-toolbar-label-hint { font-size: 10px; color: #8F8FA3; margin-top: 1px; }
+    .agent-toolbar-pills { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; }
+    .agent-pill { display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px 4px 4px; font-size: 12px; font-weight: 500; color: #2E2E38; background: #fff; border: 1px solid #DBE4E8; border-radius: 999px; cursor: pointer; font-family: inherit; transition: all 0.12s ease; }
+    .agent-pill:hover { border-color: var(--agent-color, #543FDE); background: var(--agent-bg, #EDECFB); color: var(--agent-color, #543FDE); transform: translateY(-1px); box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
+    .agent-pill:active { transform: translateY(0); }
+    .agent-pill-disabled { opacity: 0.45; cursor: not-allowed; }
+    .agent-pill-disabled:hover { transform: none; box-shadow: none; border-color: #DBE4E8; background: #fff; color: #2E2E38; }
+    .agent-pill-dot { width: 20px; height: 20px; border-radius: 50%; color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; flex-shrink: 0; }
+    .agent-pill-label { white-space: nowrap; }
+
+    /* Agent runner modal */
+    .agent-task-body { display: flex; flex-direction: column; gap: 16px; }
+    .agent-steps { background: #F8F8FB; border: 1px solid #ECECF2; border-radius: 8px; padding: 10px 12px; max-height: 260px; overflow-y: auto; }
+    .agent-step { display: flex; gap: 10px; padding: 6px 2px; align-items: flex-start; opacity: 0.45; transition: opacity 0.2s ease; }
+    .agent-step-running, .agent-step-done { opacity: 1; }
+    .agent-step-icon { width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 12px; font-weight: 700; color: #28A464; margin-top: 1px; }
+    .agent-step-pending .agent-step-icon::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: #D0D0DC; }
+    .agent-step-body { flex: 1; min-width: 0; }
+    .agent-step-label { font-size: 12.5px; color: #3F4547; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .agent-step-running .agent-step-label { color: #2E2E38; font-weight: 600; }
+    .agent-step-done .agent-step-label { color: #65657B; }
+    .agent-step-tool { font-family: 'SF Mono', 'Menlo', 'Courier New', monospace; font-size: 10.5px; background: #EDECFB; color: #543FDE; padding: 1px 6px; border-radius: 3px; font-weight: 500; }
+    .agent-step-detail { font-size: 11.5px; color: #8F8FA3; margin-top: 2px; font-family: 'SF Mono', 'Menlo', 'Courier New', monospace; }
+
+    .agent-output-wrap { display: flex; flex-direction: column; gap: 6px; }
+    .agent-output-label { font-size: 10.5px; font-weight: 700; color: #8F8FA3; text-transform: uppercase; letter-spacing: 0.5px; display: flex; gap: 8px; align-items: center; }
+    .agent-cursor-label { font-size: 10px; color: #543FDE; font-weight: 500; text-transform: none; letter-spacing: 0; animation: blink 1.1s infinite; }
+    .agent-output { background: #2E2E38; color: #E8E8F4; font-family: 'SF Mono', 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 12.5px; line-height: 1.55; padding: 14px 16px; border-radius: 8px; max-height: 380px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; margin: 0; }
+    .agent-cursor { display: inline-block; width: 8px; height: 14px; background: #A0A0FF; vertical-align: text-bottom; margin-left: 2px; animation: blink 1s steps(2) infinite; }
+    @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+
     /* Pulsating risk markers on Highcharts map */
     @keyframes risk-pulse-crit { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.55); opacity: 0.7; } }
     @keyframes risk-pulse-high { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.35); opacity: 0.8; } }
@@ -208,7 +243,9 @@
       document.body.appendChild(s);
     }
     loadScript('https://unpkg.com/antd@5.11.2/dist/antd.min.js', function() {
-      loadScript('app.js', function() {});
+      loadScript('agents.js', function() {
+        loadScript('app.js', function() {});
+      });
     });
   })();
   </script>

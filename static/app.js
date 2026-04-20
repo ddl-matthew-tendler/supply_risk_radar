@@ -696,6 +696,13 @@ function WorldMapTab(props) {
           { label: 'Low', value: 'low' },
         ]
       }),
+      h(window.AgentPill, {
+        agentId: 'forecaster', taskId: 'scenario',
+        ctx: {
+          region: catFilter !== 'All' ? (catFilter + ' suppliers') : (riskFilter !== 'All' ? riskFilter + '-risk suppliers' : 'All critical regions'),
+          event: 'Sudden 2-week regional halt'
+        }
+      }, 'Run what-if scenario'),
       h('div', { className: 'map-legend', style: { marginLeft: 'auto' } },
         h('span', { style: { fontSize: 11, fontWeight: 600, color: '#8F8FA3', marginRight: 4 } }, 'Legend'),
         ['critical', 'high', 'medium', 'low'].map(function(lvl) {
@@ -739,6 +746,14 @@ function WorldMapTab(props) {
       })() : null,
     },
       drawerSupplier ? h('div', null,
+        // Agent toolbar — specialized agents scoped to this supplier
+        h(window.AgentToolbar, { label: 'Agents' },
+          h(window.AgentPill, { agentId: 'historian', taskId: 'relationshipTimeline', ctx: { supplier: drawerSupplier } }, 'Summarize history'),
+          h(window.AgentPill, { agentId: 'scribe', taskId: 'draftOutreach', ctx: { supplier: drawerSupplier } }, 'Draft outreach'),
+          h(window.AgentPill, { agentId: 'scout', taskId: 'findAlternates', ctx: { supplier: drawerSupplier } }, drawerSupplier.sole ? 'Find alternates (urgent)' : 'Find alternates'),
+          h(window.AgentPill, { agentId: 'analyst', taskId: 'riskBrief', ctx: { supplier: drawerSupplier } }, 'Explain risk score'),
+          h(window.AgentPill, { agentId: 'forecaster', taskId: 'scenario', ctx: { region: drawerSupplier.country, event: 'Sudden 2-week halt in ' + drawerSupplier.country } }, 'Simulate disruption')
+        ),
         drawerSupplier.actionTakenAt ? h(Alert, {
           type: 'success', showIcon: true,
           message: actionImpact(drawerSupplier.lastAction).note,
@@ -980,7 +995,24 @@ function WatchlistTab(props) {
           h('div', { style: { padding: '0 0 0 0' } },
             h('div', { style: { fontSize: 11, fontWeight: 600, color: '#3B3BD3', padding: '0 16px 4px' } }, 'Mitigation suggestion'),
             h('div', { className: 'mitigation-box' }, card.mitigationSuggestion)
-          )
+          ),
+          // Agent toolbar on expanded watchlist card
+          (function() {
+            var sup = (props.suppliers || []).find(function(s) { return s.id === card.supplierId; }) || {
+              id: card.supplierId, name: card.supplierName, country: card.country, shortName: card.supplierName,
+              category: 'API', riskScore: card.riskScore, riskLevel: card.riskLevel, sole: card.alternateStatus === 'None',
+              activeEvents: card.sourceEvents || [], drugProducts: [card.drugProductId], spend: card.revenueAtRisk || 0,
+              alternateStatus: card.alternateStatus, fda483Date: null, hsCode: null, tariffExposure: 0,
+            };
+            return h('div', { style: { padding: '0 16px 12px' } },
+              h(window.AgentToolbar, { label: 'Agents' },
+                h(window.AgentPill, { agentId: 'scribe', taskId: 'draftOutreach', ctx: { supplier: sup } }, 'Draft outreach'),
+                h(window.AgentPill, { agentId: 'scout', taskId: 'findAlternates', ctx: { supplier: sup } }, 'Find alternates'),
+                h(window.AgentPill, { agentId: 'analyst', taskId: 'riskBrief', ctx: { supplier: sup } }, 'Explain risk score'),
+                h(window.AgentPill, { agentId: 'historian', taskId: 'relationshipTimeline', ctx: { supplier: sup } }, 'Summarize history')
+              )
+            );
+          })()
         ) : null
       );
     }),
@@ -1166,6 +1198,8 @@ function AlertsTab(props) {
         ),
         h('div', { className: 'alert-action-row' },
           h(Button, { size: 'small', onClick: function() { setActionModal(alert); form.resetFields(); } }, 'Log action'),
+          h(window.AgentPill, { agentId: 'verifier', taskId: 'verifySignal', ctx: { alert: alert } }, 'Verify signal'),
+          h(window.AgentPill, { agentId: 'negotiator', taskId: 'contractReview', ctx: { alert: alert } }, 'Check contract'),
           h(Button, { size: 'small', type: 'text', onClick: function() { markReviewed(alert.id); } }, alert.reviewedAt ? 'Reviewed' : 'Mark reviewed'),
           h(Button, { size: 'small', type: 'text', danger: true, onClick: function() { dismiss(alert.id); } }, 'Dismiss'),
           h('div', { style: { marginLeft: 'auto', fontSize: 11, color: '#8F8FA3' } }, 'Confidence: ', h('b', null, Math.round((alert.confidence || 0.8) * 100) + '%'))
@@ -1319,8 +1353,8 @@ function ExecBriefTab(props) {
   useEffect(function() { setCurrentBrief(brief); }, [brief]);
 
   function regenerate() {
-    setLoading(true);
-    setTimeout(function() { setLoading(false); setCurrentBrief(brief); message.success('Executive brief regenerated'); }, 2200);
+    // Hand off to Briefer agent — shows streaming steps and drafts the brief live.
+    window.dispatchEvent(new CustomEvent('open-agent', { detail: { taskId: 'regenerateBrief', ctx: {} } }));
   }
 
   if (!currentBrief) return h('div', { className: 'tab-pane' }, h(Spin, null));
@@ -1910,7 +1944,8 @@ function App() {
           style: { flex: 1, display: 'flex', flexDirection: 'column' },
         })
       ),
-      h(AboutModal, { open: aboutOpen, onClose: function() { setAboutOpen(false); } })
+      h(AboutModal, { open: aboutOpen, onClose: function() { setAboutOpen(false); } }),
+      window.AgentRunner ? h(window.AgentRunner) : null
     )
   );
 }
