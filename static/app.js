@@ -839,8 +839,16 @@ function WorldMapTab(props) {
             ]
           })
         ),
+        window.RationaleDrafters ? h(window.RationaleDrafters, {
+          form: drawerForm,
+          baseCtx: {
+            supplierName: drawerSupplier.name,
+            country: drawerSupplier.country,
+            riskScore: drawerSupplier.riskScore,
+          },
+        }) : null,
         h(Form.Item, { label: 'Rationale', name: 'rationale', rules: [{ required: true, message: 'Rationale is required for the audit trail' }] },
-          h(Input.TextArea, { rows: 3, placeholder: 'Describe why this action was taken and what data informed the decision...' })
+          h(Input.TextArea, { rows: 4, placeholder: 'Describe why this action was taken and what data informed the decision...' })
         )
       ) : null
     )
@@ -1052,8 +1060,18 @@ function WatchlistTab(props) {
             ]
           })
         ),
+        window.RationaleDrafters ? h(window.RationaleDrafters, {
+          form: form,
+          baseCtx: {
+            supplierName: actionModal.supplierName,
+            country: actionModal.country,
+            drugProductName: actionModal.drugProductName,
+            riskScore: actionModal.riskScore,
+            revenueAtRisk: actionModal.revenueAtRisk,
+          },
+        }) : null,
         h(Form.Item, { label: 'Rationale', name: 'rationale', rules: [{ required: true, message: 'Rationale is required for the audit trail' }] },
-          h(Input.TextArea, { rows: 3, placeholder: 'Describe why this action was taken and what data informed the decision...' })
+          h(Input.TextArea, { rows: 4, placeholder: 'Describe why this action was taken and what data informed the decision...' })
         )
       ) : null
     )
@@ -1257,8 +1275,29 @@ function AlertsTab(props) {
             { label: 'Monitor - no action required', value: 'monitor' },
           ]})
         ),
+        window.RationaleDrafters ? h(window.RationaleDrafters, {
+          form: form,
+          baseCtx: (function() {
+            var sup = props.suppliers && actionModal.supplierId
+              ? props.suppliers.find(function(s) { return s.id === actionModal.supplierId; })
+              : null;
+            // drugImpact entries look like "Vexorin (dp001) - sole KSM source, $2.1B revenue".
+            // Pull the bare drug name (everything before the first paren) for the rationale.
+            var drug = null;
+            if (actionModal.drugImpact && actionModal.drugImpact.length) {
+              var raw = actionModal.drugImpact[0];
+              drug = raw.split('(')[0].trim() || raw;
+            }
+            return {
+              supplierName: actionModal.supplierName,
+              country: sup ? sup.country : null,
+              drugProductName: drug,
+              riskScore: sup ? sup.riskScore : null,
+            };
+          })(),
+        }) : null,
         h(Form.Item, { label: 'Rationale', name: 'rationale', rules: [{ required: true, message: 'Rationale is required for the audit trail' }] },
-          h(Input.TextArea, { rows: 3, placeholder: 'Describe why this action was taken and what data informed the decision...' })
+          h(Input.TextArea, { rows: 4, placeholder: 'Describe why this action was taken and what data informed the decision...' })
         )
       ) : null
     )

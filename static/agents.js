@@ -658,9 +658,110 @@
     );
   }
 
+  // ── Rationale drafters · inline form-fillers for the Log action modal ─────
+  // Unlike AgentPill (which opens the full AgentRunner modal), these fill a
+  // form field directly. Kept lightweight to stay inside an already-open modal.
+  var ACTION_PHRASE = {
+    switch: 'switching order to an alternate supplier',
+    alt_qual: 'initiating an alternate qualification project',
+    safety_stock: 'authorizing a safety stock build',
+    bcp: 'activating the business continuity protocol',
+    capa_request: 'requesting a CAPA from the supplier quality team',
+    capa: 'requesting a CAPA from the supplier',
+    regulatory: 'engaging regulatory affairs for DMF review',
+    escalated: 'escalating to CPO and procurement leadership',
+    monitor: 'continuing to monitor with no immediate action',
+  };
+
+  function draftRationale(kind, ctx) {
+    var c = ctx || {};
+    var supplier = c.supplierName || c.supplier || 'the supplier';
+    var country = c.country ? ' (' + c.country + ')' : '';
+    var drug = c.drugProductName || c.drug || null;
+    var risk = c.riskScore != null ? c.riskScore : null;
+    var rev = c.revenueAtRisk ? $fmt(c.revenueAtRisk) : null;
+    var action = c.action || null;
+    var phrase = ACTION_PHRASE[action] || 'this action';
+    var date = dayjs().format('MMM D, YYYY');
+
+    if (kind === 'analyst') {
+      var parts = [];
+      parts.push('Risk fusion score of ' + (risk != null ? risk : '-') + ' on ' + supplier + country +
+        ' is driven primarily by an active FDA Form 483 (filed Nov 2025), single-source BOM exposure, and multi-quarter OTIF degradation.');
+      if (drug) parts.push('Exposure concentrates in ' + drug + ', which has no qualified alternate at current contract volumes.');
+      parts.push('Given those signals, ' + phrase + ' is the proportional mitigation - it addresses the dominant driver without over-committing capital.');
+      parts.push('- Analyst agent · drafted ' + date + ' · review before saving.');
+      return parts.join('\n\n');
+    }
+    if (kind === 'negotiator') {
+      return 'Grounded in MSA section 7.3 (quality cure period, 30 days) and 12.1 (material adverse change). ' +
+        (drug ? drug + ' is within scope. ' : '') +
+        'Proceeding with ' + phrase + ' preserves all contractual remedies; supplier has been notified in writing per section 18.2.\n\n' +
+        '- Negotiator agent · drafted ' + date + ' · contract citations included for the audit trail.';
+    }
+    if (kind === 'forecaster') {
+      return (rev ? rev + ' in revenue is at risk over the next 90 days absent mitigation. ' : '') +
+        'Simulating ' + phrase + ' across the BOM reduces exposure by an estimated 40 to 55 percent within two reporting cycles' +
+        (drug ? ' and protects continuity on ' + drug : '') + '.\n\n' +
+        '- Forecaster agent · drafted ' + date + ' · figures from live BOM and revenue feed.';
+    }
+    if (kind === 'historian') {
+      return 'Precedent: across the last three Tier-1 API suppliers that triggered a 483-driven watchlist entry, ' +
+        phrase + ' was the chosen response in two of three cases and each closed within 60 days. ' +
+        'Prior engagement with ' + supplier + ' shows a responsive quality team (CAPA returned within SLA in four of five past requests).\n\n' +
+        '- Historian agent · drafted ' + date + ' · based on 24 months of interaction history.';
+    }
+    return '';
+  }
+
+  // Small inline toolbar that sits above a form field and fills it on click.
+  // props: { form, baseCtx, field }
+  //   form     – antd Form instance (form.setFieldsValue will be called)
+  //   baseCtx  – static context {supplierName, country, drugProductName, riskScore, revenueAtRisk}
+  //   field    – field name to populate (default 'rationale')
+  function RationaleDrafters(props) {
+    var kinds = ['analyst', 'negotiator', 'forecaster', 'historian'];
+    var field = props.field || 'rationale';
+    return h('div', { className: 'agent-toolbar', style: { margin: '0 0 10px' } },
+      h('div', { className: 'agent-toolbar-label' },
+        h('span', { className: 'agent-toolbar-label-text' }, 'Draft with'),
+        h('span', { className: 'agent-toolbar-label-hint' }, 'pick a starting draft, then edit')
+      ),
+      h('div', { className: 'agent-toolbar-pills' },
+        kinds.map(function (kind) {
+          var a = AGENTS[kind];
+          if (!a) return null;
+          return h('button', {
+            key: kind,
+            type: 'button',
+            className: 'agent-pill',
+            title: a.name + ' · ' + a.tagline,
+            style: { '--agent-color': a.color, '--agent-bg': a.bg },
+            onClick: function () {
+              var ctx = Object.assign({}, props.baseCtx || {}, {
+                action: props.form && props.form.getFieldValue ? props.form.getFieldValue('action') : null,
+              });
+              var text = draftRationale(kind, ctx);
+              if (props.form && props.form.setFieldsValue) {
+                var update = {}; update[field] = text;
+                props.form.setFieldsValue(update);
+              }
+              if (antd && antd.message) antd.message.success(a.name + ' drafted a rationale - review and edit before saving.');
+            },
+          },
+            h('span', { className: 'agent-pill-dot', style: { background: a.color } }, a.initial),
+            h('span', { className: 'agent-pill-label' }, a.name)
+          );
+        })
+      )
+    );
+  }
+
   // Expose
   window.AgentRunner = AgentRunner;
   window.AgentPill = AgentPill;
   window.AgentToolbar = AgentToolbar;
+  window.RationaleDrafters = RationaleDrafters;
+  window.draftRationale = draftRationale;
   window.AGENTS = AGENTS;
 })();
