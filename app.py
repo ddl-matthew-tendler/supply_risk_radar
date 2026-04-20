@@ -1,12 +1,25 @@
 import os
 import json
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 import httpx
+
+# Lazy pandas import so the app still boots in envs without pandas installed.
+try:
+    import pandas as pd
+except Exception:
+    pd = None
+
+SRR_VOLUME_ROOT = Path(os.environ.get(
+    "SRR_VOLUME_ROOT",
+    "/mnt/netapp-volumes/Supply_Risk_Radar",
+))
+SIGNALS_MATCHED = SRR_VOLUME_ROOT / "signals_curated" / "openfda_matched.parquet"
+OPENFDA_WATERMARK = SRR_VOLUME_ROOT / "state" / "openfda_watermark.json"
 
 app = FastAPI()
 
@@ -257,6 +270,55 @@ def get_me():
         ],
         "ssoStatus": "api_pending",
     }
+
+
+# ── openFDA signals (Phase A) ────────────────────────────────────────────────
+@app.get("/api/signals/openfda")
+def get_openfda_signals(supplier_id: str | None = None, since_days: int = 90, limit: int = 200):
+    """Read the curated openFDA enforcement parquet landed by jobs/ingest_openfda.py.
+
+    Returns { status, source, count, lastRun, signals: [...] }. Falls back to
+    `status: no_data` when the job has not run yet — the app can keep rendering
+    its mock events until real data shows up.
+    """
+    if pd is None:
+        return {"status": "pandas_unavailable", "signals": [], "count": 0}
+    if not SIGNALS_MATCHED.exists():
+        return {
+            "status": "no_data",
+            "message": "openFDA ingest job has not produced data yet.",
+            "expectedAt": str(SIGNALS_MATCHED),
+            "signals": [],
+            "count": 0,
+        }
+    try:
+        df = pd.read_parquet(SIGNALS_MATCHED)
+        if df.empty:
+            return {"status": "empty", "signals": [], "count": 0}
+        cutoff = datetime.now(timezone.utc) - timedelta(days=since_days)
+        df["event_date"] = pd.to_datetime(df["event_date"], errors="coerce", utc=True)
+        df = df[df["event_date"] >= cutoff]
+        if supplier_id:
+            df = df[df["supplier_id"] == supplier_id]
+        df = df.sort_values("event_date", ascending=False).head(limit)
+        df["event_date"] = df["event_date"].dt.strftime("%Y-%m-%d")
+        signals = json.loads(df.to_json(orient="records", date_format="iso"))
+        last_run = None
+        if OPENFDA_WATERMARK.exists():
+            try:
+                last_run = json.loads(OPENFDA_WATERMARK.read_text())
+            except Exception:
+                pass
+        return {
+            "status": "ok",
+            "source": "openFDA /drug/enforcement.json",
+            "count": len(signals),
+            "lastRun": last_run,
+            "signals": signals,
+        }
+    except Exception as e:
+        print(f"[signals-read-error] {e}")
+        return JSONResponse(status_code=500, content={"status": "error", "error": str(e)})
 
 
 def _load_mock(key):
