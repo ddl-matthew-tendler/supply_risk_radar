@@ -1,0 +1,1058 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Model Registry - Domino</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* ===== Reset & Base ===== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', 'Lato', 'Helvetica Neue', Arial, sans-serif;
+      font-size: 14px;
+      color: #2E2E38;
+      background: #FAFAFA;
+      line-height: 1.5;
+    }
+
+    /* ===== Top Nav (Domino style) ===== */
+    .top-nav {
+      height: 44px;
+      background: #2E2E38;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      color: #FFFFFF;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .top-nav .logo {
+      font-weight: 700;
+      font-size: 16px;
+      letter-spacing: 1px;
+      margin-right: 32px;
+    }
+    .top-nav .nav-links {
+      display: flex;
+      gap: 24px;
+    }
+    .top-nav .nav-links a {
+      color: #C0C0CC;
+      text-decoration: none;
+      font-size: 13px;
+    }
+    .top-nav .nav-links a:hover { color: #FFFFFF; }
+    .top-nav .nav-links a.active { color: #FFFFFF; }
+    .top-nav .nav-right {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .top-nav .nav-right .avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #543FDE;
+      color: #FFF;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    /* ===== Page Layout ===== */
+    .page-container {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 24px 32px;
+    }
+
+    /* ===== Page Header ===== */
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+    .page-header h1 {
+      font-size: 24px;
+      font-weight: 600;
+      color: #2E2E38;
+    }
+    .page-header .header-actions {
+      display: flex;
+      gap: 8px;
+    }
+
+    /* ===== Buttons ===== */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 16px;
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      transition: background 0.15s, opacity 0.15s;
+    }
+    .btn-primary {
+      background: #543FDE;
+      color: #FFFFFF;
+    }
+    .btn-primary:hover { background: #3B23D1; }
+    .btn-secondary {
+      background: #EDECFB;
+      color: #1820A0;
+      border: 1px solid #C9C5F2;
+    }
+    .btn-secondary:hover { background: #DDD9F7; }
+    .btn-tertiary {
+      background: transparent;
+      color: #543FDE;
+    }
+    .btn-tertiary:hover { background: #F5F3FF; }
+    .btn[disabled] {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    /* ===== Filter Bar ===== */
+    .filter-bar {
+      background: #FFFFFF;
+      border: 1px solid #E0E0E0;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    /*
+      ISSUE: Uniform spacing — all filter elements are equally spaced
+      with no visual grouping between related controls.
+    */
+    .filter-bar .filter-row {
+      display: flex;
+      align-items: flex-end;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .filter-group {
+      display: flex;
+      flex-direction: column;
+      gap: 16px; /* ISSUE: Label-to-input gap same as between groups */
+    }
+    .filter-group label {
+      font-size: 12px;
+      font-weight: 600;
+      color: #65657B;
+      text-transform: uppercase; /* ISSUE: ALL CAPS labels look harsh */
+    }
+    .filter-group input,
+    .filter-group select {
+      height: 32px;
+      padding: 0 10px;
+      border: 1px solid #E0E0E0;
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 13px;
+      color: #2E2E38;
+      background: #FFFFFF;
+      min-width: 160px;
+    }
+    .filter-group input:focus,
+    .filter-group select:focus {
+      outline: none;
+      border-color: #543FDE;
+      box-shadow: 0 0 0 2px rgba(84, 63, 222, 0.15);
+    }
+
+    .filter-actions {
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+    }
+
+    /* ===== Checkbox (negative phrasing) ===== */
+    .checkbox-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .checkbox-row input[type="checkbox"] {
+      width: 16px;
+      height: 16px;
+      accent-color: #543FDE;
+    }
+    .checkbox-row label {
+      font-size: 13px;
+      color: #65657B;
+    }
+
+    /* ===== Stats Bar ===== */
+    .stats-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      font-size: 13px;
+      color: #65657B;
+    }
+    .stats-bar .result-count { font-weight: 500; }
+
+    /* ===== Bulk Actions ===== */
+    .bulk-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .bulk-actions span {
+      font-size: 12px;
+      color: #8F8FA3;
+      margin-right: 4px;
+    }
+
+    /* ===== Table Container ===== */
+    .table-container {
+      background: #FFFFFF;
+      border: 1px solid #E0E0E0;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .data-table thead {
+      background: #FAFAFA;
+    }
+    .data-table th {
+      padding: 10px 12px;
+      text-align: left;
+      font-size: 12px;
+      font-weight: 600;
+      color: #65657B;
+      border-bottom: 1px solid #E0E0E0;
+      white-space: nowrap;
+      user-select: none;
+    }
+    .data-table th.sortable { cursor: pointer; }
+    .data-table th.sortable:hover { color: #543FDE; }
+    .data-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #F0F0F0;
+      font-size: 13px;
+      color: #2E2E38;
+      vertical-align: middle;
+    }
+    .data-table tbody tr:hover {
+      background: #F8F7FF;
+    }
+    .data-table tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    /* ISSUE: Truncation without tooltips */
+    .cell-truncate {
+      max-width: 160px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .cell-truncate-narrow {
+      max-width: 100px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* ===== Status Tags ===== */
+    .status-tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .status-tag.deployed {
+      background: #E6F7EE;
+      color: #28A464;
+    }
+    .status-tag.staging {
+      background: #FFF8E0;
+      color: #B5A200;
+    }
+    .status-tag.archived {
+      background: #F0F0F0;
+      color: #8F8FA3;
+    }
+    .status-tag.failed {
+      background: #FDE8EC;
+      color: #C20A29;
+    }
+
+    /* ===== Row Actions ===== */
+    /*
+      ISSUE: Tiny icon buttons (16x16) with no tooltips,
+      placed far right away from the row content.
+    */
+    .row-actions {
+      display: flex;
+      gap: 4px;
+      justify-content: flex-end;
+    }
+    .row-actions .icon-btn {
+      width: 20px;
+      height: 20px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 3px;
+      color: #8F8FA3;
+      font-size: 13px;
+      padding: 0;
+    }
+    .row-actions .icon-btn:hover {
+      background: #F0F0F0;
+      color: #2E2E38;
+    }
+
+    /* ===== Pagination ===== */
+    .pagination {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-top: 1px solid #E0E0E0;
+      font-size: 13px;
+      color: #65657B;
+    }
+    .pagination .page-controls {
+      display: flex;
+      gap: 4px;
+    }
+    .pagination .page-btn {
+      width: 28px;
+      height: 28px;
+      border: 1px solid #E0E0E0;
+      background: #FFFFFF;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #2E2E38;
+    }
+    .pagination .page-btn:hover { background: #F5F3FF; border-color: #543FDE; }
+    .pagination .page-btn.active {
+      background: #543FDE;
+      color: #FFFFFF;
+      border-color: #543FDE;
+    }
+    .pagination .page-btn[disabled] {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    /* ===== Empty State ===== */
+    /* ISSUE: Non-actionable empty state */
+    .empty-state {
+      text-align: center;
+      padding: 48px 16px;
+      color: #8F8FA3;
+      font-size: 14px;
+      display: none;
+    }
+
+    /* ===== Error Banner ===== */
+    /* ISSUE: Vague, non-actionable error message */
+    .error-banner {
+      background: #FDE8EC;
+      border: 1px solid #F5C6CE;
+      border-radius: 4px;
+      padding: 10px 16px;
+      margin-bottom: 16px;
+      font-size: 13px;
+      color: #C20A29;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .error-banner .error-icon { font-size: 16px; }
+
+    /* ===== Modal Overlay ===== */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .modal-overlay.visible { display: flex; }
+    .modal {
+      background: #FFFFFF;
+      border-radius: 8px;
+      width: 480px;
+      max-width: 90vw;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+    }
+    .modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid #E0E0E0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .modal-header h2 {
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .modal-header .close-btn {
+      background: none;
+      border: none;
+      font-size: 18px;
+      color: #8F8FA3;
+      cursor: pointer;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-body {
+      padding: 20px;
+    }
+    .modal-body .form-group {
+      margin-bottom: 16px;
+    }
+    .modal-body .form-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: #2E2E38;
+      margin-bottom: 6px;
+    }
+    .modal-body .form-group input,
+    .modal-body .form-group select,
+    .modal-body .form-group textarea {
+      width: 100%;
+      height: 36px;
+      padding: 0 12px;
+      border: 1px solid #E0E0E0;
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 14px;
+      color: #2E2E38;
+    }
+    .modal-body .form-group textarea {
+      height: 80px;
+      padding: 8px 12px;
+      resize: vertical;
+    }
+    .modal-body .form-group input:focus,
+    .modal-body .form-group select:focus,
+    .modal-body .form-group textarea:focus {
+      outline: none;
+      border-color: #543FDE;
+      box-shadow: 0 0 0 2px rgba(84, 63, 222, 0.15);
+    }
+    /* ISSUE: No required field indicators, no helper text */
+    .modal-footer {
+      padding: 12px 20px;
+      border-top: 1px solid #E0E0E0;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    /* ===== Delete Confirmation Modal ===== */
+    .confirm-text {
+      font-size: 14px;
+      color: #2E2E38;
+      line-height: 1.6;
+    }
+
+    /* ===== Inline Validation Error ===== */
+    .field-error {
+      font-size: 12px;
+      color: #C20A29;
+      margin-top: 4px;
+      display: none;
+    }
+
+    /* ===== Tooltip (only used in a few places on purpose) ===== */
+    .has-tooltip {
+      position: relative;
+    }
+    .has-tooltip .tooltip-text {
+      display: none;
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #2E2E38;
+      color: #FFFFFF;
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      white-space: nowrap;
+      z-index: 10;
+      pointer-events: none;
+    }
+    .has-tooltip:hover .tooltip-text { display: block; }
+
+    /* ===== SVG Icons (inline) ===== */
+    .icon {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      vertical-align: middle;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation Bar -->
+  <nav class="top-nav">
+    <div class="logo">domino</div>
+    <div class="nav-links">
+      <a href="#">Projects</a>
+      <a href="#">Workspaces</a>
+      <a href="#" class="active">Model Registry</a>
+      <a href="#">Datasets</a>
+      <a href="#">Jobs</a>
+    </div>
+    <div class="nav-right">
+      <!-- ISSUE: Tiny icon button, no tooltip -->
+      <button class="icon-btn" style="background:none; border:none; color:#C0C0CC; cursor:pointer; font-size:16px; width:20px; height:20px; padding:0;">&#x1F514;</button>
+      <div class="avatar">JD</div>
+    </div>
+  </nav>
+
+  <div class="page-container">
+
+    <!-- Page Header -->
+    <div class="page-header">
+      <h1>Model Registry</h1>
+      <div class="header-actions">
+        <!--
+          ISSUE #1: Multiple Primary buttons — "Register Model" and "Import Models"
+          both styled as primary, competing for attention.
+        -->
+        <button class="btn btn-primary" onclick="openRegisterModal()">Register Model</button>
+        <button class="btn btn-primary" onclick="alert('Import started')">Import Models</button>
+        <!--
+          ISSUE #2: Disabled button with no tooltip explaining why it's disabled.
+        -->
+        <button class="btn btn-secondary" disabled>Export</button>
+      </div>
+    </div>
+
+    <!--
+      ISSUE #3: Vague, non-actionable error banner.
+      Says "Error" with no resolution steps.
+    -->
+    <div class="error-banner" id="errorBanner">
+      <span class="error-icon">⚠</span>
+      <span>Error occurred. Something went wrong.</span>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="filter-bar">
+      <div class="filter-row">
+        <!--
+          ISSUE #4: Uniform spacing between all filter groups — no visual clustering
+          of related filters. Label-to-input gap (16px) is same as between groups.
+        -->
+        <div class="filter-group">
+          <label>MODEL NAME</label>
+          <input type="text" id="filterName" placeholder="Search..." oninput="applyFilters()">
+        </div>
+        <div class="filter-group">
+          <label>OWNER</label>
+          <select id="filterOwner" onchange="applyFilters()">
+            <option value="">All</option>
+            <option value="jane.doe">jane.doe</option>
+            <option value="bob.smith">bob.smith</option>
+            <option value="alice.wong">alice.wong</option>
+            <option value="carlos.reyes">carlos.reyes</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>STATUS</label>
+          <select id="filterStatus" onchange="applyFilters()">
+            <option value="">All</option>
+            <option value="Deployed">Deployed</option>
+            <option value="Staging">Staging</option>
+            <option value="Archived">Archived</option>
+            <option value="Failed">Failed</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>FRAMEWORK</label>
+          <select id="filterFramework" onchange="applyFilters()">
+            <option value="">All</option>
+            <option value="PyTorch">PyTorch</option>
+            <option value="TensorFlow">TensorFlow</option>
+            <option value="Scikit-learn">Scikit-learn</option>
+            <option value="XGBoost">XGBoost</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label>DATE RANGE</label>
+          <input type="date" id="filterDateFrom">
+        </div>
+        <div class="filter-group">
+          <label>TO</label>
+          <input type="date" id="filterDateTo">
+        </div>
+        <div class="filter-actions">
+          <!--
+            ISSUE #5: Vague button labels — "Submit" and "OK" instead of
+            "Apply filters" and "Clear filters".
+          -->
+          <button class="btn btn-primary" onclick="applyFilters()">Submit</button>
+          <button class="btn btn-tertiary" onclick="clearFilters()">OK</button>
+        </div>
+      </div>
+      <!--
+        ISSUE #6: Checkbox with negative / double-negative phrasing.
+        "Exclude archived models" when checked means hiding things — confusing.
+      -->
+      <div class="checkbox-row">
+        <input type="checkbox" id="excludeArchived" checked onchange="applyFilters()">
+        <label for="excludeArchived">Exclude archived models</label>
+      </div>
+      <!--
+        ISSUE #7: Another negatively phrased checkbox.
+      -->
+      <div class="checkbox-row">
+        <input type="checkbox" id="hideUntagged">
+        <label for="hideUntagged">Don't show untagged models</label>
+      </div>
+    </div>
+
+    <!-- Stats Bar -->
+    <div class="stats-bar">
+      <span class="result-count" id="resultCount">Showing 8 models</span>
+      <div class="bulk-actions">
+        <span>Bulk:</span>
+        <!--
+          ISSUE #8: More icon-only buttons without tooltips, tiny size.
+        -->
+        <button class="icon-btn" style="background:none; border:none; cursor:pointer; color:#8F8FA3; font-size:14px; padding:2px;">&#128230;</button>
+        <button class="icon-btn" style="background:none; border:none; cursor:pointer; color:#8F8FA3; font-size:14px; padding:2px;">&#128465;</button>
+        <button class="icon-btn" style="background:none; border:none; cursor:pointer; color:#8F8FA3; font-size:14px; padding:2px;">&#9881;</button>
+      </div>
+    </div>
+
+    <!-- Data Table -->
+    <div class="table-container">
+      <table class="data-table" id="modelTable">
+        <thead>
+          <tr>
+            <th style="width: 32px;"><input type="checkbox" id="selectAll" onclick="toggleSelectAll()"></th>
+            <th class="sortable" onclick="sortTable('name')">Model Name &#x25B4;&#x25BE;</th>
+            <th>Description</th>
+            <th class="sortable" onclick="sortTable('owner')">Owner</th>
+            <th>Framework</th>
+            <th class="sortable" onclick="sortTable('status')">Status</th>
+            <!--
+              ISSUE #9: Numbers (accuracy, latency) are LEFT-aligned
+              instead of right-aligned as they should be for numeric data.
+            -->
+            <th class="sortable" onclick="sortTable('accuracy')">Accuracy</th>
+            <th>Latency (ms)</th>
+            <th class="sortable" onclick="sortTable('updated')">Last Updated</th>
+            <th>Tags</th>
+            <!--
+              ISSUE #10: Actions column placed far right, away from
+              the model name the user is focused on (Fitts's Law violation).
+            -->
+            <th style="width: 80px; text-align: right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody">
+          <!-- Rows injected by JS -->
+        </tbody>
+      </table>
+
+      <!--
+        ISSUE #11: Non-actionable empty state — just says "No results"
+        with no guidance on what to do.
+      -->
+      <div class="empty-state" id="emptyState">
+        No results.
+      </div>
+
+      <!-- Pagination -->
+      <div class="pagination" id="pagination">
+        <span>Showing 1-8 of 8</span>
+        <div class="page-controls">
+          <button class="page-btn" disabled>&laquo;</button>
+          <button class="page-btn active">1</button>
+          <button class="page-btn" disabled>&raquo;</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Register Model Modal -->
+  <div class="modal-overlay" id="registerModal">
+    <div class="modal">
+      <div class="modal-header">
+        <!--
+          ISSUE #12: Title says "Add New Model" — should just be "Register model"
+          per the word catalog ("Don't say 'add new'").
+        -->
+        <h2>Add New Model</h2>
+        <button class="close-btn" onclick="closeRegisterModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <!--
+          ISSUE #13: No required field indicators (* or "required"),
+          no helper text, placeholder-as-label for the description.
+        -->
+        <div class="form-group">
+          <label>Model Name</label>
+          <input type="text" id="regModelName" placeholder="Enter model name">
+          <div class="field-error" id="nameError">Invalid input</div>
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <!--
+            ISSUE #14: Placeholder used as the only guidance —
+            no label info or helper text about max length etc.
+          -->
+          <textarea id="regDescription" placeholder="Description goes here..."></textarea>
+        </div>
+        <div class="form-group">
+          <label>Framework</label>
+          <select id="regFramework">
+            <option value="">-- Select --</option>
+            <option value="PyTorch">PyTorch</option>
+            <option value="TensorFlow">TensorFlow</option>
+            <option value="Scikit-learn">Scikit-learn</option>
+            <option value="XGBoost">XGBoost</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Owner</label>
+          <input type="text" id="regOwner" placeholder="Owner">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <!--
+          ISSUE #15: "Cancel" styled as PRIMARY (competing with the real CTA).
+          Both buttons look equally important.
+        -->
+        <button class="btn btn-primary" onclick="closeRegisterModal()">Cancel</button>
+        <!--
+          ISSUE #16: Vague CTA — "Submit" instead of "Register model".
+        -->
+        <button class="btn btn-primary" onclick="submitRegister()">Submit</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Confirmation Modal -->
+  <div class="modal-overlay" id="deleteModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Confirm</h2>
+        <button class="close-btn" onclick="closeDeleteModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <!--
+          ISSUE #17: Vague confirmation copy —
+          doesn't name the model or explain consequences.
+        -->
+        <p class="confirm-text">Are you sure? This action cannot be undone.</p>
+      </div>
+      <div class="modal-footer">
+        <!--
+          ISSUE #18: Generic "Yes" / "No" buttons instead of
+          action-oriented labels like "Delete model" / "Keep".
+        -->
+        <button class="btn btn-secondary" onclick="closeDeleteModal()">No</button>
+        <button class="btn btn-primary" onclick="confirmDelete()" style="background:#C20A29;">Yes</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ===== Sample Data =====
+    const models = [
+      {
+        name: 'customer-churn-predictor-v3-enterprise-production',
+        description: 'Gradient boosted model predicting customer churn probability based on engagement metrics and usage patterns over the last 90 days',
+        owner: 'jane.doe',
+        framework: 'XGBoost',
+        status: 'Deployed',
+        accuracy: 0.943,
+        latency: 12,
+        updated: '2026-01-28',
+        tags: ['production', 'churn']
+      },
+      {
+        name: 'fraud-detection-ensemble-model',
+        description: 'Ensemble of random forest and neural network for real-time transaction fraud scoring',
+        owner: 'bob.smith',
+        framework: 'PyTorch',
+        status: 'Deployed',
+        accuracy: 0.971,
+        latency: 45,
+        updated: '2026-01-30',
+        tags: ['production', 'fraud']
+      },
+      {
+        name: 'sentiment-analysis-bert-finetuned',
+        description: 'Fine-tuned BERT model for multi-class sentiment classification on customer support tickets and product reviews',
+        owner: 'alice.wong',
+        framework: 'PyTorch',
+        status: 'Staging',
+        accuracy: 0.887,
+        latency: 120,
+        updated: '2026-02-01',
+        tags: ['nlp']
+      },
+      {
+        name: 'demand-forecasting-lstm',
+        description: 'LSTM-based time series forecasting for weekly product demand prediction across distribution centers',
+        owner: 'carlos.reyes',
+        framework: 'TensorFlow',
+        status: 'Staging',
+        accuracy: 0.812,
+        latency: 89,
+        updated: '2026-02-03',
+        tags: []
+      },
+      {
+        name: 'image-classification-resnet50-v2-transfer-learning',
+        description: '', // ISSUE: blank description, will render as empty cell with no "—"
+        owner: 'jane.doe',
+        framework: 'PyTorch',
+        status: 'Archived',
+        accuracy: null, // ISSUE: null renders blank instead of "—" or "N/A"
+        latency: null,
+        updated: '2025-11-15',
+        tags: ['deprecated']
+      },
+      {
+        name: 'anomaly-detector-autoencoder-prod',
+        description: 'Autoencoder for detecting anomalous patterns in server log data with configurable sensitivity thresholds',
+        owner: 'bob.smith',
+        framework: 'TensorFlow',
+        status: 'Deployed',
+        accuracy: 0.934,
+        latency: 22,
+        updated: '2026-01-25',
+        tags: ['production', 'monitoring']
+      },
+      {
+        name: 'recommendation-engine-collaborative',
+        description: 'Collaborative filtering recommendation engine using matrix factorization techniques for personalized product suggestions',
+        owner: 'alice.wong',
+        framework: 'Scikit-learn',
+        status: 'Failed',
+        accuracy: 0.756,
+        latency: 350,
+        updated: '2026-02-04',
+        tags: ['recsys']
+      },
+      {
+        name: 'credit-risk-scoring-v4',
+        description: 'Gradient boosted decision tree ensemble for consumer credit risk assessment',
+        owner: 'carlos.reyes',
+        framework: 'XGBoost',
+        status: 'Deployed',
+        accuracy: 0.918,
+        latency: 8,
+        updated: '2026-01-22',
+        tags: ['production', 'risk']
+      }
+    ];
+
+    let filteredModels = [...models];
+    let deleteTargetIndex = null;
+
+    // ===== Render Table =====
+    function renderTable() {
+      const tbody = document.getElementById('tableBody');
+      const emptyState = document.getElementById('emptyState');
+      const pagination = document.getElementById('pagination');
+
+      if (filteredModels.length === 0) {
+        tbody.innerHTML = '';
+        emptyState.style.display = 'block';
+        pagination.style.display = 'none';
+        document.getElementById('resultCount').textContent = 'No models found';
+        return;
+      }
+
+      emptyState.style.display = 'none';
+      pagination.style.display = 'flex';
+      document.getElementById('resultCount').textContent = `Showing ${filteredModels.length} models`;
+
+      tbody.innerHTML = filteredModels.map((m, i) => {
+        const statusClass = m.status.toLowerCase();
+        /*
+          ISSUE #19: Accuracy and latency are rendered with no alignment class —
+          they end up left-aligned in the cell (numbers should be right-aligned).
+          Also, null/empty values render as blank instead of "—".
+        */
+        const accuracy = m.accuracy !== null ? (m.accuracy * 100).toFixed(1) + '%' : '';
+        const latency = m.latency !== null ? m.latency : '';
+        /*
+          ISSUE #20: Date shown as raw ISO format "2026-01-28" instead of
+          human-friendly "January 28, 2026" or relative like "3 days ago".
+        */
+        const tags = m.tags.length > 0
+          ? m.tags.map(t => `<span class="status-tag" style="background:#F0EEFE;color:#543FDE;margin-right:4px;">${t}</span>`).join('')
+          : '';
+
+        return `
+          <tr>
+            <td><input type="checkbox" class="row-check"></td>
+            <td class="cell-truncate" style="font-weight:500;">${m.name}</td>
+            <td class="cell-truncate">${m.description}</td>
+            <td>${m.owner}</td>
+            <td>${m.framework}</td>
+            <td><span class="status-tag ${statusClass}">${m.status}</span></td>
+            <td>${accuracy}</td>
+            <td>${latency}</td>
+            <td class="cell-truncate-narrow">${m.updated}</td>
+            <td>${tags}</td>
+            <td>
+              <div class="row-actions">
+                <!--
+                  ISSUE #21: Icon-only action buttons without tooltips,
+                  with tiny 20x20px hit targets. Users must guess what
+                  each icon does.
+                -->
+                <button class="icon-btn" onclick="alert('Details for: ${m.name}')">&#128065;</button>
+                <button class="icon-btn" onclick="alert('Edit: ${m.name}')">&#9998;</button>
+                <button class="icon-btn" onclick="openDeleteModal(${i})">&#128465;</button>
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // ===== Filtering =====
+    function applyFilters() {
+      const nameFilter = document.getElementById('filterName').value.toLowerCase();
+      const ownerFilter = document.getElementById('filterOwner').value;
+      const statusFilter = document.getElementById('filterStatus').value;
+      const frameworkFilter = document.getElementById('filterFramework').value;
+      const excludeArchived = document.getElementById('excludeArchived').checked;
+
+      filteredModels = models.filter(m => {
+        if (nameFilter && !m.name.toLowerCase().includes(nameFilter)) return false;
+        if (ownerFilter && m.owner !== ownerFilter) return false;
+        if (statusFilter && m.status !== statusFilter) return false;
+        if (frameworkFilter && m.framework !== frameworkFilter) return false;
+        if (excludeArchived && m.status === 'Archived') return false;
+        return true;
+      });
+
+      renderTable();
+    }
+
+    function clearFilters() {
+      document.getElementById('filterName').value = '';
+      document.getElementById('filterOwner').value = '';
+      document.getElementById('filterStatus').value = '';
+      document.getElementById('filterFramework').value = '';
+      document.getElementById('filterDateFrom').value = '';
+      document.getElementById('filterDateTo').value = '';
+      document.getElementById('excludeArchived').checked = false;
+      document.getElementById('hideUntagged').checked = false;
+      filteredModels = [...models];
+      renderTable();
+    }
+
+    // ===== Sorting (basic toggle) =====
+    let sortDirection = {};
+    function sortTable(key) {
+      const dir = sortDirection[key] === 'asc' ? 'desc' : 'asc';
+      sortDirection[key] = dir;
+
+      filteredModels.sort((a, b) => {
+        let valA = a[key];
+        let valB = b[key];
+        if (valA === null) valA = '';
+        if (valB === null) valB = '';
+        if (typeof valA === 'string') {
+          return dir === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
+        }
+        return dir === 'asc' ? valA - valB : valB - valA;
+      });
+
+      renderTable();
+    }
+
+    // ===== Select All =====
+    function toggleSelectAll() {
+      const checked = document.getElementById('selectAll').checked;
+      document.querySelectorAll('.row-check').forEach(cb => cb.checked = checked);
+    }
+
+    // ===== Register Modal =====
+    function openRegisterModal() {
+      document.getElementById('registerModal').classList.add('visible');
+    }
+    function closeRegisterModal() {
+      document.getElementById('registerModal').classList.remove('visible');
+      document.getElementById('nameError').style.display = 'none';
+    }
+    function submitRegister() {
+      const name = document.getElementById('regModelName').value.trim();
+      if (!name) {
+        /*
+          ISSUE #22: Vague inline validation error — "Invalid input"
+          instead of "Model name is required".
+        */
+        document.getElementById('nameError').style.display = 'block';
+        return;
+      }
+      document.getElementById('nameError').style.display = 'none';
+      closeRegisterModal();
+      alert('Model registered.');
+    }
+
+    // ===== Delete Modal =====
+    function openDeleteModal(index) {
+      deleteTargetIndex = index;
+      document.getElementById('deleteModal').classList.add('visible');
+    }
+    function closeDeleteModal() {
+      document.getElementById('deleteModal').classList.remove('visible');
+      deleteTargetIndex = null;
+    }
+    function confirmDelete() {
+      if (deleteTargetIndex !== null) {
+        models.splice(deleteTargetIndex, 1);
+        applyFilters();
+      }
+      closeDeleteModal();
+    }
+
+    // ===== Init =====
+    applyFilters();
+  </script>
+</body>
+</html>

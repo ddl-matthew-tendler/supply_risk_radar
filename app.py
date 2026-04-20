@@ -1,12 +1,19 @@
 import os
+import sys
 import json
 import time
+import threading
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 import httpx
+
+# Make sibling jobs/ importable so the app can run the ingest in-process.
+# (NetApp volume mounts RW on the App but RO on Domino Jobs, so ingest
+# must run inside this process to land data on the shared volume.)
+sys.path.insert(0, str(Path(__file__).parent))
 
 # Lazy pandas import so the app still boots in envs without pandas installed.
 try:
@@ -324,6 +331,76 @@ def get_openfda_signals(supplier_id: str | None = None, since_days: int = 90, li
 def _load_mock(key):
     """Return empty fallback — frontend uses window globals from mock_data.js."""
     return {}
+
+
+# ── In-process openFDA ingest (Jobs can't write the volume; App can) ────────
+_ingest_state = {
+    "running": False,
+    "lastStartedAt": None,
+    "lastFinishedAt": None,
+    "lastStatus": None,
+    "lastError": None,
+    "lastCount": None,
+}
+
+
+def _run_ingest_once() -> dict:
+    _ingest_state["running"] = True
+    _ingest_state["lastStartedAt"] = datetime.now(timezone.utc).isoformat()
+    _ingest_state["lastError"] = None
+    try:
+        from jobs import ingest_openfda  # lazy import
+        rc = ingest_openfda.main()
+        _ingest_state["lastStatus"] = "ok" if rc == 0 else f"exit_{rc}"
+        if OPENFDA_WATERMARK.exists():
+            try:
+                wm = json.loads(OPENFDA_WATERMARK.read_text())
+                _ingest_state["lastCount"] = wm.get("reports_ingested_last_run")
+            except Exception:
+                pass
+    except Exception as e:
+        _ingest_state["lastStatus"] = "error"
+        _ingest_state["lastError"] = str(e)
+        print(f"[ingest-error] {e}")
+    finally:
+        _ingest_state["lastFinishedAt"] = datetime.now(timezone.utc).isoformat()
+        _ingest_state["running"] = False
+    return dict(_ingest_state)
+
+
+def _ingest_scheduler() -> None:
+    """Run ingest on boot, then every 24h. Survives failures."""
+    time.sleep(15)  # let the app finish booting
+    while True:
+        try:
+            _run_ingest_once()
+        except Exception as e:
+            print(f"[scheduler-error] {e}")
+        time.sleep(24 * 60 * 60)
+
+
+@app.on_event("startup")
+def _start_scheduler():
+    if os.environ.get("SRR_DISABLE_INGEST") == "1":
+        print("[ingest] disabled via SRR_DISABLE_INGEST=1")
+        return
+    t = threading.Thread(target=_ingest_scheduler, daemon=True, name="openfda-ingest")
+    t.start()
+    print("[ingest] background scheduler started")
+
+
+@app.post("/api/signals/openfda/ingest")
+def trigger_ingest():
+    if _ingest_state["running"]:
+        return {"status": "already_running", "state": _ingest_state}
+    t = threading.Thread(target=_run_ingest_once, daemon=True)
+    t.start()
+    return {"status": "started", "state": _ingest_state}
+
+
+@app.get("/api/signals/openfda/ingest/status")
+def ingest_status():
+    return _ingest_state
 
 
 app.mount("/", StaticFiles(directory="static", html=True), name="static")

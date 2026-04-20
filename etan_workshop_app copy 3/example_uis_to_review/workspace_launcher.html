@@ -1,0 +1,1172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Start Workspace - Domino</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* ===== Reset & Base ===== */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', 'Lato', 'Helvetica Neue', Arial, sans-serif;
+      font-size: 14px;
+      color: #2E2E38;
+      background: #FAFAFA;
+      line-height: 1.5;
+    }
+
+    /* ===== Top Nav ===== */
+    .top-nav {
+      height: 44px;
+      background: #2E2E38;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      color: #FFFFFF;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .top-nav .logo {
+      font-weight: 700;
+      font-size: 16px;
+      letter-spacing: 1px;
+      margin-right: 32px;
+    }
+    .top-nav .nav-links {
+      display: flex;
+      gap: 24px;
+    }
+    .top-nav .nav-links a {
+      color: #C0C0CC;
+      text-decoration: none;
+      font-size: 13px;
+    }
+    .top-nav .nav-links a:hover { color: #FFFFFF; }
+    .top-nav .nav-links a.active { color: #FFFFFF; }
+    .top-nav .nav-right {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .top-nav .nav-right .avatar {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #543FDE;
+      color: #FFF;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    /* ===== Page Layout ===== */
+    .page-container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 24px 32px;
+    }
+
+    /* ===== Breadcrumb ===== */
+    /*
+      ISSUE: No breadcrumb or back navigation.
+      User has no way to get back to the project or understand
+      where they are in the hierarchy.
+    */
+
+    /* ===== Page Header ===== */
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 32px;
+    }
+    .page-header h1 {
+      font-size: 24px;
+      font-weight: 600;
+      color: #2E2E38;
+    }
+    /*
+      ISSUE #1: Title uses Title Case "Start New Workspace Session"
+      instead of Sentence case "Start new workspace session".
+      Also uses redundant "New" (Domino style: just "Start workspace").
+    */
+    .page-header .subtitle {
+      font-size: 13px;
+      color: #8F8FA3;
+      margin-top: 4px;
+    }
+
+    /* ===== Buttons ===== */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 20px;
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      transition: background 0.15s, opacity 0.15s;
+    }
+    .btn-primary {
+      background: #543FDE;
+      color: #FFFFFF;
+    }
+    .btn-primary:hover { background: #3B23D1; }
+    .btn-secondary {
+      background: #EDECFB;
+      color: #1820A0;
+      border: 1px solid #C9C5F2;
+    }
+    .btn-secondary:hover { background: #DDD9F7; }
+    .btn-tertiary {
+      background: transparent;
+      color: #543FDE;
+    }
+    .btn-tertiary:hover { background: #F5F3FF; }
+    .btn-danger {
+      background: #C20A29;
+      color: #FFFFFF;
+    }
+    .btn-danger:hover { background: #A50822; }
+    .btn[disabled] {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    /* ===== Section Card ===== */
+    .section-card {
+      background: #FFFFFF;
+      border: 1px solid #E0E0E0;
+      border-radius: 8px;
+      padding: 24px;
+      margin-bottom: 16px;
+    }
+    .section-card h2 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: #2E2E38;
+    }
+
+    /* ===== Form Groups ===== */
+    .form-group {
+      margin-bottom: 20px;
+    }
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: #2E2E38;
+      margin-bottom: 6px;
+    }
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%;
+      height: 36px;
+      padding: 0 12px;
+      border: 1px solid #E0E0E0;
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 14px;
+      color: #2E2E38;
+      background: #FFF;
+    }
+    .form-group textarea {
+      height: 80px;
+      padding: 8px 12px;
+      resize: vertical;
+    }
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: #543FDE;
+      box-shadow: 0 0 0 2px rgba(84, 63, 222, 0.15);
+    }
+
+    /*
+      ISSUE #2: Excessive inline help text everywhere.
+      The checklist says "In-context guidance (tooltips/popovers,
+      but not littered with first-time help txt)". This UI slaps
+      a long paragraph of help text under nearly every field,
+      cluttering the form and reducing scannability.
+    */
+    .help-text {
+      font-size: 12px;
+      color: #8F8FA3;
+      margin-top: 4px;
+      line-height: 1.5;
+    }
+    .help-text-long {
+      font-size: 11px;
+      color: #8F8FA3;
+      margin-top: 4px;
+      line-height: 1.6;
+      background: #F8F8FB;
+      border: 1px solid #EDEDF0;
+      border-radius: 4px;
+      padding: 8px 10px;
+    }
+
+    /* ===== Toggle Switch ===== */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid #F0F0F0;
+    }
+    .toggle-row:last-child {
+      border-bottom: none;
+    }
+    .toggle-label {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .toggle-label .label-main {
+      font-size: 14px;
+      font-weight: 500;
+      color: #2E2E38;
+    }
+    .toggle-label .label-desc {
+      font-size: 12px;
+      color: #8F8FA3;
+    }
+    .toggle-switch {
+      position: relative;
+      width: 40px;
+      height: 22px;
+      flex-shrink: 0;
+    }
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .toggle-slider {
+      position: absolute;
+      inset: 0;
+      background: #C0C0CC;
+      border-radius: 22px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .toggle-slider::before {
+      content: '';
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #FFF;
+      top: 2px;
+      left: 2px;
+      transition: transform 0.2s;
+    }
+    .toggle-switch input:checked + .toggle-slider {
+      background: #543FDE;
+    }
+    .toggle-switch input:checked + .toggle-slider::before {
+      transform: translateX(18px);
+    }
+
+    /* ===== Hardware Tier Cards ===== */
+    .tier-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+    .tier-card {
+      border: 2px solid #E0E0E0;
+      border-radius: 8px;
+      padding: 16px;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      position: relative;
+    }
+    .tier-card:hover {
+      border-color: #543FDE;
+      background: #FAFAFF;
+    }
+    .tier-card.selected {
+      border-color: #543FDE;
+      background: #F5F3FF;
+    }
+    .tier-card .tier-name {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .tier-card .tier-specs {
+      font-size: 12px;
+      color: #65657B;
+      line-height: 1.5;
+    }
+    .tier-card .tier-price {
+      font-size: 11px;
+      color: #8F8FA3;
+      margin-top: 8px;
+    }
+    /*
+      ISSUE #3: Disabled tier card with no tooltip or message explaining
+      WHY it's disabled or HOW to get access.
+    */
+    .tier-card.disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
+    /* ===== Status Banner ===== */
+    .status-banner {
+      padding: 12px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .status-banner.info {
+      background: #E8F0FE;
+      border: 1px solid #B8D4FE;
+      color: #1A56DB;
+    }
+    .status-banner.error {
+      background: #FDE8EC;
+      border: 1px solid #F5C6CE;
+      color: #C20A29;
+    }
+    .status-banner.success {
+      background: #E6F7EE;
+      border: 1px solid #B8E6CE;
+      color: #28A464;
+    }
+
+    /* ===== Footer Actions ===== */
+    .footer-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding-top: 24px;
+      border-top: 1px solid #E0E0E0;
+      margin-top: 8px;
+    }
+
+    /* ===== Modal Overlay ===== */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.4);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .modal-overlay.visible { display: flex; }
+    .modal {
+      background: #FFFFFF;
+      border-radius: 8px;
+      width: 640px;
+      max-width: 90vw;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+    }
+    .modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid #E0E0E0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      background: #FFF;
+      z-index: 1;
+    }
+    .modal-header h2 {
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .modal-header .close-btn {
+      background: none;
+      border: none;
+      font-size: 18px;
+      color: #8F8FA3;
+      cursor: pointer;
+    }
+    .modal-body {
+      padding: 20px;
+    }
+    .modal-footer {
+      padding: 12px 20px;
+      border-top: 1px solid #E0E0E0;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      position: sticky;
+      bottom: 0;
+      background: #FFF;
+    }
+
+    /* ===== Environment List (inside modal) ===== */
+    .env-list-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      border: 1px solid #E0E0E0;
+      border-radius: 4px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    .env-list-item:hover {
+      border-color: #543FDE;
+      background: #FAFAFF;
+    }
+    .env-list-item.selected {
+      border-color: #543FDE;
+      background: #F5F3FF;
+    }
+    .env-list-item .env-name {
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .env-list-item .env-details {
+      font-size: 12px;
+      color: #65657B;
+    }
+    .env-list-item .env-status {
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+    .env-status.ready {
+      background: #E6F7EE;
+      color: #28A464;
+    }
+    .env-status.building {
+      background: #FFF8E0;
+      color: #B5A200;
+    }
+    .env-status.failed {
+      background: #FDE8EC;
+      color: #C20A29;
+    }
+
+    /* ===== Volume List ===== */
+    .volume-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 0;
+      border-bottom: 1px solid #F0F0F0;
+    }
+    .volume-row:last-child { border-bottom: none; }
+    .volume-row .vol-name {
+      font-size: 13px;
+      font-weight: 500;
+      flex: 1;
+    }
+    .volume-row .vol-size {
+      font-size: 12px;
+      color: #65657B;
+      width: 80px;
+    }
+    .volume-row .vol-mount {
+      font-size: 12px;
+      color: #65657B;
+      flex: 1;
+      max-width: 200px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    /*
+      ISSUE: Tiny icon-only remove buttons on volumes with no tooltip.
+      But this is similar to model_registry, so we keep it minor here.
+    */
+    .volume-row .remove-btn {
+      background: none;
+      border: none;
+      color: #C20A29;
+      cursor: pointer;
+      font-size: 14px;
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 3px;
+      padding: 0;
+    }
+    .volume-row .remove-btn:hover {
+      background: #FDE8EC;
+    }
+
+    /* ===== Launching Overlay ===== */
+    /*
+      ISSUE #4: When "Start" is clicked, there is NO loading spinner,
+      NO progress bar, NO status updates. The button text just changes
+      to "Starting..." with no feedback about what's happening, how long
+      it will take, or whether it's still working. This violates the
+      checklist item: "Loading states / spinner / progress for long-lived
+      actions."
+
+      In reality, starting a Domino Workspace can take 2-5+ minutes
+      (pulling images, provisioning hardware). The user is left staring
+      at a disabled button with zero feedback.
+    */
+
+    /* ===== Inconsistent section styling ===== */
+    /*
+      ISSUE #5: Section headings use inconsistent casing:
+      - "Hardware Tier Selection" (Title Case)
+      - "Compute environment" (Sentence case)
+      - "DATA VOLUMES" (ALL CAPS)
+      - "Advanced Settings" (Title Case)
+      Checklist says: "Text is Sentence case except for Feature/Entity
+      names (Projects, Model API)"
+    */
+
+    /* ===== Warning callout ===== */
+    .warning-callout {
+      background: #FFF8E0;
+      border: 1px solid #F0E0A0;
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-size: 12px;
+      color: #8A7600;
+      margin-bottom: 16px;
+    }
+
+    /* ===== Inline tag ===== */
+    .inline-tag {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-weight: 500;
+      background: #F0EEFE;
+      color: #543FDE;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+
+    /* ===== Recent workspaces sidebar hint ===== */
+    .recent-box {
+      background: #FFF;
+      border: 1px solid #E0E0E0;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .recent-box h3 {
+      font-size: 13px;
+      font-weight: 600;
+      color: #65657B;
+      margin-bottom: 10px;
+    }
+    .recent-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 0;
+      font-size: 13px;
+      border-bottom: 1px solid #F0F0F0;
+    }
+    .recent-item:last-child { border-bottom: none; }
+    .recent-item .ri-name {
+      font-weight: 500;
+      color: #543FDE;
+      cursor: pointer;
+    }
+    .recent-item .ri-date {
+      font-size: 11px;
+      color: #8F8FA3;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Navigation Bar -->
+  <nav class="top-nav">
+    <div class="logo">domino</div>
+    <div class="nav-links">
+      <a href="#">Projects</a>
+      <a href="#" class="active">Workspaces</a>
+      <a href="#">Model Registry</a>
+      <a href="#">Datasets</a>
+      <a href="#">Jobs</a>
+    </div>
+    <div class="nav-right">
+      <button style="background:none; border:none; color:#C0C0CC; cursor:pointer; font-size:16px;">&#x1F514;</button>
+      <div class="avatar">JD</div>
+    </div>
+  </nav>
+
+  <div class="page-container">
+
+    <!--
+      ISSUE #1 (MISSING PATTERN): No breadcrumb.
+      User navigated here from a Project page but there's no breadcrumb
+      like "Projects > fraud-detection > Start workspace". The user has
+      no context about which project this workspace belongs to, and no
+      easy way to navigate back.
+    -->
+
+    <!-- Page Header -->
+    <div class="page-header">
+      <div>
+        <!--
+          ISSUE #5a: Title uses Title Case + redundant "New".
+          Should be "Start workspace" in Sentence case.
+        -->
+        <h1>Start New Workspace Session</h1>
+        <!--
+          ISSUE #6: Inconsistent terminology.
+          The page title says "Workspace Session", the subtitle says
+          "instance", and later sections say "environment", "container",
+          and "session" interchangeably. The checklist requires
+          "Consistent terms (Domino nouns + verbs)".
+        -->
+        <div class="subtitle">Configure and launch a new compute instance for your project</div>
+      </div>
+    </div>
+
+    <!-- Status Banner (shown on error) -->
+    <div class="status-banner error" id="errorBanner" style="display: none;">
+      <!--
+        ISSUE #7: Vague error with no actionable guidance.
+        Similar to model_registry, but included here in the context
+        of workspace launch failures where users really need to know
+        WHAT failed and WHY.
+      -->
+      <span>⚠ Failed to start. Please try again later.</span>
+    </div>
+
+    <!-- Recent Workspaces -->
+    <div class="recent-box">
+      <!--
+        ISSUE #5b: "Recent Sessions" — uses "Sessions" instead of
+        the page's "Workspace" terminology. Inconsistent.
+      -->
+      <h3>Recent Sessions</h3>
+      <div class="recent-item">
+        <span class="ri-name">Workspace #4821</span>
+        <span class="ri-date">2 hours ago</span>
+      </div>
+      <div class="recent-item">
+        <span class="ri-name">Workspace #4790</span>
+        <span class="ri-date">Jan 30, 2026</span>
+      </div>
+      <div class="recent-item">
+        <span class="ri-name">Workspace #4712</span>
+        <span class="ri-date">Jan 25, 2026</span>
+      </div>
+    </div>
+
+    <!-- Section 1: Hardware Tier -->
+    <div class="section-card">
+      <!--
+        ISSUE #5c: "Hardware Tier Selection" — Title Case.
+        Should be "Hardware tier" in Sentence case.
+      -->
+      <h2>Hardware Tier Selection</h2>
+
+      <!--
+        ISSUE #2a: Excessive inline help text.
+        This paragraph is always visible and takes up significant space.
+        A tooltip or expandable "Learn more" link would be better.
+      -->
+      <p class="help-text-long">
+        Hardware tiers determine the CPU, memory, and GPU resources allocated to your
+        workspace instance. Higher tiers provide more computational power but may have
+        longer queue times during peak usage. Your organization's admin configures which
+        tiers are available. If you need a tier that isn't listed, contact your Domino
+        administrator. GPU tiers are recommended for deep learning workloads. Note that
+        idle workspaces will be automatically stopped after the configured timeout period
+        to conserve resources. Billing is per-minute while the workspace is running.
+      </p>
+
+      <div class="tier-grid" style="margin-top: 16px;">
+        <div class="tier-card selected" onclick="selectTier(this)">
+          <div class="tier-name">Small</div>
+          <div class="tier-specs">
+            1 CPU / 4 GB RAM<br>
+            No GPU
+          </div>
+          <div class="tier-price">~$0.12/hr</div>
+        </div>
+        <div class="tier-card" onclick="selectTier(this)">
+          <div class="tier-name">Medium</div>
+          <div class="tier-specs">
+            4 CPU / 16 GB RAM<br>
+            No GPU
+          </div>
+          <div class="tier-price">~$0.48/hr</div>
+        </div>
+        <div class="tier-card" onclick="selectTier(this)">
+          <!--
+            ISSUE #5d: "Large (GPU Enabled)" — Title Case on "Enabled".
+            Also "GPU Enabled" could just be an icon or tag, not part of the name.
+          -->
+          <div class="tier-name">Large (GPU Enabled)</div>
+          <div class="tier-specs">
+            8 CPU / 64 GB RAM<br>
+            1x NVIDIA A100
+          </div>
+          <div class="tier-price">~$3.20/hr</div>
+        </div>
+      </div>
+
+      <div class="tier-grid" style="margin-top: 12px;">
+        <div class="tier-card" onclick="selectTier(this)">
+          <div class="tier-name">X-Large</div>
+          <div class="tier-specs">
+            16 CPU / 128 GB RAM<br>
+            2x NVIDIA A100
+          </div>
+          <div class="tier-price">~$6.40/hr</div>
+        </div>
+        <!--
+          ISSUE #3: Disabled tier card with NO explanation of why
+          it's disabled or how to get access. The checklist says:
+          "Disabled actions explain why + how to enable."
+          A user who needs this tier has no idea what to do.
+        -->
+        <div class="tier-card disabled">
+          <div class="tier-name">HPC Cluster <span class="inline-tag">Restricted</span></div>
+          <div class="tier-specs">
+            64 CPU / 512 GB RAM<br>
+            8x NVIDIA H100
+          </div>
+          <div class="tier-price">~$28.00/hr</div>
+        </div>
+        <div class="tier-card disabled">
+          <div class="tier-name">Spark Cluster</div>
+          <div class="tier-specs">
+            Distributed compute<br>
+            Auto-scaling
+          </div>
+          <div class="tier-price">Variable</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 2: Compute Environment -->
+    <div class="section-card">
+      <!--
+        ISSUE #5e: "Compute environment" — correct Sentence case here,
+        but inconsistent with the Title Case headings above and below.
+      -->
+      <h2>Compute environment</h2>
+
+      <!--
+        ISSUE #2b: More excessive always-visible help text.
+      -->
+      <p class="help-text-long">
+        Environments define the software stack (OS, languages, libraries, packages) available
+        in your workspace. Each environment is built as a Docker container image. If you need
+        custom packages, you can create a new environment or add them to your project's
+        Dockerfile instructions. Environments may take several minutes to build when first
+        created or updated. Contact your admin if you need a specific base image.
+      </p>
+
+      <div class="form-group" style="margin-top: 16px;">
+        <label>Selected Environment</label>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input type="text" id="selectedEnv" value="Domino Standard Environment (R4.3 + Python 3.9)" readonly
+                 style="background: #F8F8FB; flex: 1;">
+          <!--
+            ISSUE #8 (CORE PATTERN MISUSE): "Change" opens a MODAL to browse
+            and select from a long list of environments. This complex picker
+            with search, filters, and details should be a DRAWER (slide-in panel)
+            not a centered modal. Modals are for confirmations and simple forms.
+          -->
+          <button class="btn btn-secondary" onclick="openEnvModal()">Change</button>
+        </div>
+        <p class="help-text">
+          Currently using the default organization environment. Click "Change" to browse all available images.
+        </p>
+      </div>
+
+      <!--
+        ISSUE #6b: "container image revision" — uses Docker jargon
+        ("container image") instead of Domino terminology ("environment revision").
+      -->
+      <div class="form-group">
+        <label>Container Image Revision</label>
+        <select>
+          <option>Latest (Rev 14 — built Feb 1, 2026)</option>
+          <option>Rev 13 — built Jan 22, 2026</option>
+          <option>Rev 12 — built Jan 10, 2026</option>
+          <option>Rev 11 — built Dec 18, 2025</option>
+        </select>
+        <p class="help-text">
+          The container image revision determines which version of the software stack is used.
+          We recommend always using the latest revision unless you need reproducibility with a
+          specific previous version. Older revisions may have security vulnerabilities.
+        </p>
+      </div>
+    </div>
+
+    <!-- Section 3: Data Volumes -->
+    <div class="section-card">
+      <!--
+        ISSUE #5f: "DATA VOLUMES" — ALL CAPS heading.
+        Inconsistent with the mixed casing of other section headings.
+      -->
+      <h2 style="text-transform: uppercase; font-size: 13px; letter-spacing: 1px; color: #65657B;">
+        Data Volumes
+      </h2>
+
+      <!--
+        ISSUE #2c: Yet another block of always-visible help text.
+        By this point the form is drowning in instructional paragraphs.
+      -->
+      <p class="help-text-long">
+        Data volumes allow you to mount shared datasets into your workspace. Volumes are
+        read-only by default unless you explicitly request write access. Large datasets
+        may increase workspace startup time as they need to be mounted to the compute node.
+        If a dataset isn't listed here, check that it has been shared with your project or
+        contact the dataset owner. Volume mount paths must be unique and cannot conflict with
+        system directories. Maximum of 5 volumes per workspace.
+      </p>
+
+      <div style="margin-top: 16px;">
+        <div class="volume-row">
+          <input type="checkbox" checked>
+          <span class="vol-name">training-data-2026</span>
+          <span class="vol-size">42.3 GB</span>
+          <span class="vol-mount" title="/mnt/data/training-data-2026">/mnt/data/training-data-2026</span>
+          <button class="remove-btn">&times;</button>
+        </div>
+        <div class="volume-row">
+          <input type="checkbox" checked>
+          <span class="vol-name">shared-model-artifacts</span>
+          <span class="vol-size">8.7 GB</span>
+          <span class="vol-mount" title="/mnt/data/shared-model-artifacts">/mnt/data/shared-model-art...</span>
+          <button class="remove-btn">&times;</button>
+        </div>
+        <div class="volume-row">
+          <input type="checkbox">
+          <span class="vol-name">customer-features-snapshot-jan-2026-quarterly-refresh</span>
+          <span class="vol-size">156.2 GB</span>
+          <!--
+            ISSUE: Mount path is truncated with no tooltip on the truncated text.
+            Checklist says: "Icon-only buttons, truncated text have tooltips."
+          -->
+          <span class="vol-mount">/mnt/data/customer-featu...</span>
+          <button class="remove-btn">&times;</button>
+        </div>
+      </div>
+
+      <div style="margin-top: 12px;">
+        <!--
+          ISSUE #9: "Add" button with vague label.
+          Should be "Attach dataset" or "Add volume" — specific to
+          the domain action.
+        -->
+        <button class="btn btn-tertiary" onclick="alert('Volume picker not implemented')">+ Add</button>
+      </div>
+    </div>
+
+    <!-- Section 4: Advanced Settings -->
+    <div class="section-card">
+      <!--
+        ISSUE #5g: "Advanced Settings" — Title Case again.
+      -->
+      <h2>Advanced Settings</h2>
+
+      <!--
+        ISSUE #10 (INVERTED TOGGLES): Multiple toggles use inverted
+        or confusing language. The checklist says: "Checkbox toggle
+        language clear (and avoids inverted enable to disable)."
+
+        "Disable auto-shutdown" — the OFF state means auto-shutdown IS on.
+        Turning this ON means you're DISABLING something.
+        Should be "Keep workspace running" or "Auto-shutdown" (where ON = enabled).
+
+        "Suppress startup notifications" — inverted. ON means you WON'T
+        get notifications. Should be "Startup notifications" where ON = enabled.
+      -->
+
+      <div class="toggle-row">
+        <div class="toggle-label">
+          <span class="label-main">Disable Auto-Shutdown</span>
+          <span class="label-desc">Prevent the workspace from automatically stopping after idle timeout</span>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
+      <div class="toggle-row">
+        <div class="toggle-label">
+          <span class="label-main">Suppress Startup Notifications</span>
+          <span class="label-desc">Don't send email or Slack alerts when the session starts</span>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
+      <div class="toggle-row">
+        <div class="toggle-label">
+          <!--
+            ISSUE #6c: "Enable Collaborative Mode" — uses "Mode" which
+            is vague. Also, "Enable" in the label is redundant when
+            the toggle already represents on/off.
+          -->
+          <span class="label-main">Enable Collaborative Mode</span>
+          <span class="label-desc">Allow other project contributors to connect to your active session</span>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" checked>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
+      <div class="toggle-row">
+        <div class="toggle-label">
+          <!--
+            ISSUE #10b: Double negative — "Don't persist changes" when unchecked
+            means changes ARE persisted. Very confusing.
+          -->
+          <span class="label-main">Don't Persist Changes On Stop</span>
+          <span class="label-desc">Workspace filesystem changes will be discarded when the instance terminates</span>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
+      <div class="form-group" style="margin-top: 16px;">
+        <!--
+          ISSUE #5h: "Idle Timeout Duration" — Title Case.
+        -->
+        <label>Idle Timeout Duration</label>
+        <select>
+          <option>30 minutes</option>
+          <option>1 hour</option>
+          <option selected>2 hours</option>
+          <option>4 hours</option>
+          <option>8 hours</option>
+          <option>Never (not recommended)</option>
+        </select>
+        <p class="help-text">
+          How long the workspace can remain idle before it is automatically stopped. Idle means no active
+          terminal commands, no Jupyter kernel activity, and no file saves. Note that if you selected
+          "Disable Auto-Shutdown" above, this setting has no effect, but it is still displayed here which
+          may cause confusion. We recommend a timeout of at least 1 hour for most workloads.
+        </p>
+      </div>
+
+      <!--
+        ISSUE #2d: Warning callout that is always shown — adds to the
+        noise. A contextual tooltip on the timeout dropdown would be better.
+      -->
+      <div class="warning-callout">
+        ⚠ Setting a long idle timeout or disabling auto-shutdown will consume compute resources
+        and may affect your organization's cloud budget. Resources are billed per-minute. Please
+        be mindful of costs and stop your workspace when not in use. If you're unsure about the
+        right settings, consult your Domino admin or refer to the resource management documentation.
+      </div>
+    </div>
+
+    <!-- Footer Actions -->
+    <div class="footer-actions">
+      <!--
+        ISSUE #11: "Cancel" has no destination.
+        Where does Cancel take you? Back to the project? To the
+        workspaces list? There's no breadcrumb, so the user doesn't
+        know where they came from. Also no unsaved-changes warning.
+      -->
+      <button class="btn btn-secondary" onclick="window.location.reload()">Cancel</button>
+
+      <!--
+        ISSUE #12: "Save as Draft" — there's no indication that
+        drafts exist, where they're saved, or how to find them later.
+        Also "Save as Draft" is Title Case.
+      -->
+      <button class="btn btn-secondary" onclick="alert('Draft saved.')">Save as Draft</button>
+
+      <!--
+        ISSUE #4 (NO LOADING STATE): The primary CTA "Start" is vague
+        (should be "Start workspace"). When clicked, the button just
+        becomes disabled with "Starting..." text. For an action that
+        can take 2-5+ minutes (image pull, hardware provisioning),
+        there is:
+        - No spinner/loading animation
+        - No progress steps ("Pulling image... Provisioning hardware... Mounting volumes...")
+        - No estimated time
+        - No way to cancel the in-progress launch
+        - No link to view logs
+        The user stares at a disabled button with no idea if anything
+        is happening.
+      -->
+      <button class="btn btn-primary" id="startBtn" onclick="handleStart()">Start</button>
+    </div>
+
+  </div>
+
+  <!-- Environment Picker Modal -->
+  <!--
+    ISSUE #8 (CORE PATTERN MISUSE): This is a complex browsing/selection
+    interface crammed into a modal. It has search, filters, a scrolling list,
+    and detail information. This should be a DRAWER (side panel) that slides
+    in, giving the user more space and keeping the main form visible for
+    context. Modals should be for quick confirmations and simple inputs.
+  -->
+  <div class="modal-overlay" id="envModal">
+    <div class="modal">
+      <div class="modal-header">
+        <!--
+          ISSUE #6d: "Select Container Image" — uses Docker jargon again
+          instead of "Select environment" or "Change environment".
+        -->
+        <h2>Select Container Image</h2>
+        <button class="close-btn" onclick="closeEnvModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group" style="margin-bottom: 16px;">
+          <input type="text" placeholder="Search images..." id="envSearch" oninput="filterEnvs()">
+        </div>
+
+        <div id="envList">
+          <div class="env-list-item selected" onclick="selectEnv(this, 'Domino Standard Environment (R4.3 + Python 3.9)')">
+            <div>
+              <div class="env-name">Domino Standard Environment (R4.3 + Python 3.9)</div>
+              <div class="env-details">Ubuntu 20.04 • Python 3.9.16 • R 4.3.1 • JupyterLab 3.6</div>
+            </div>
+            <span class="env-status ready">Ready</span>
+          </div>
+          <div class="env-list-item" onclick="selectEnv(this, 'Domino Analytics Distribution 2026-01')">
+            <div>
+              <div class="env-name">Domino Analytics Distribution 2026-01</div>
+              <div class="env-details">Ubuntu 22.04 • Python 3.11.7 • R 4.4.0 • Spark 3.5</div>
+            </div>
+            <span class="env-status ready">Ready</span>
+          </div>
+          <div class="env-list-item" onclick="selectEnv(this, 'PyTorch 2.2 GPU (CUDA 12.1)')">
+            <div>
+              <div class="env-name">PyTorch 2.2 GPU (CUDA 12.1)</div>
+              <div class="env-details">Ubuntu 22.04 • Python 3.11 • PyTorch 2.2 • CUDA 12.1</div>
+            </div>
+            <span class="env-status ready">Ready</span>
+          </div>
+          <div class="env-list-item" onclick="selectEnv(this, 'TensorFlow 2.15 GPU')">
+            <div>
+              <div class="env-name">TensorFlow 2.15 GPU</div>
+              <div class="env-details">Ubuntu 22.04 • Python 3.11 • TensorFlow 2.15 • CUDA 12.1</div>
+            </div>
+            <!--
+              ISSUE: "Building" status environment can still be selected.
+              No warning that it might not be ready in time.
+            -->
+            <span class="env-status building">Building</span>
+          </div>
+          <div class="env-list-item" onclick="selectEnv(this, 'Custom - fraud-detection-stack')">
+            <div>
+              <div class="env-name">Custom - fraud-detection-stack</div>
+              <div class="env-details">Ubuntu 20.04 • Python 3.9 • XGBoost • Custom packages</div>
+            </div>
+            <span class="env-status failed">Failed</span>
+          </div>
+          <div class="env-list-item" onclick="selectEnv(this, 'Minimal Python 3.12')">
+            <div>
+              <div class="env-name">Minimal Python 3.12</div>
+              <div class="env-details">Ubuntu 22.04 • Python 3.12.1 • pip only</div>
+            </div>
+            <span class="env-status ready">Ready</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeEnvModal()">Cancel</button>
+        <!--
+          ISSUE: Vague CTA "OK" instead of "Select environment".
+        -->
+        <button class="btn btn-primary" onclick="confirmEnvSelection()">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ===== Hardware Tier Selection =====
+    function selectTier(card) {
+      document.querySelectorAll('.tier-card').forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+    }
+
+    // ===== Environment Modal =====
+    let pendingEnvName = 'Domino Standard Environment (R4.3 + Python 3.9)';
+
+    function openEnvModal() {
+      document.getElementById('envModal').classList.add('visible');
+    }
+    function closeEnvModal() {
+      document.getElementById('envModal').classList.remove('visible');
+    }
+    function selectEnv(item, name) {
+      document.querySelectorAll('.env-list-item').forEach(el => el.classList.remove('selected'));
+      item.classList.add('selected');
+      pendingEnvName = name;
+    }
+    function confirmEnvSelection() {
+      document.getElementById('selectedEnv').value = pendingEnvName;
+      closeEnvModal();
+    }
+    function filterEnvs() {
+      const query = document.getElementById('envSearch').value.toLowerCase();
+      document.querySelectorAll('.env-list-item').forEach(item => {
+        const name = item.querySelector('.env-name').textContent.toLowerCase();
+        item.style.display = name.includes(query) ? 'flex' : 'none';
+      });
+    }
+
+    // ===== Start Workspace =====
+    /*
+      ISSUE #4 (NO LOADING STATE / PROGRESS):
+      When the user clicks "Start", the button changes to "Starting..."
+      and becomes disabled. That's ALL the feedback they get.
+
+      For a process that can take 2-5+ minutes:
+      - No spinner animation
+      - No progress steps (e.g., "Provisioning hardware... 1 of 4")
+      - No estimated wait time
+      - No way to cancel
+      - No log output
+      - No indication the system is still working vs. hung
+
+      After a simulated delay, an alert says "Workspace started" with
+      no link to the actual workspace.
+    */
+    function handleStart() {
+      const btn = document.getElementById('startBtn');
+      btn.disabled = true;
+      btn.textContent = 'Starting...';
+
+      // Simulate a long-running operation with ZERO progress feedback
+      setTimeout(() => {
+        btn.textContent = 'Start';
+        btn.disabled = false;
+        alert('Workspace started.');
+      }, 4000);
+    }
+  </script>
+
+</body>
+</html>
