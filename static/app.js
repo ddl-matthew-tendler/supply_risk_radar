@@ -923,19 +923,25 @@ function WatchlistTab(props) {
     setActionModal(null);
   }
 
-  return h('div', { className: 'tab-pane' },
-    h('div', { className: 'stats-row' },
-      h(StatCard, { label: 'On Watchlist', value: items.length, color: 'primary' }),
-      h(StatCard, { label: 'Unreviewed', value: unreviewed, color: 'danger' }),
-      h(StatCard, { label: 'No Alternate', value: items.filter(function(c) { return c.alternateStatus === 'None'; }).length, color: 'warning', sub: 'Sole-source exposure' }),
-      h(StatCard, { label: 'Revenue at Risk', value: fmt$(items.reduce(function(s, c) { return s + (c.revenueAtRisk || 0); }, 0)), color: 'danger' })
-    ),
+  // When supplier-scoped, stat cards reflect the scope (so numbers match the list below).
+  var statSource = props.supplierFocus ? filtered : items;
+  var statUnreviewed = props.supplierFocus
+    ? filtered.filter(function(c) { return !c.reviewedAt; }).length
+    : unreviewed;
 
+  return h('div', { className: 'tab-pane' },
     focusedSupplier ? h(Alert, {
       type: 'info', showIcon: true, style: { marginBottom: 12 },
-      message: h('span', null, 'Scoped to ', h('b', null, focusedSupplier.name), ' from the map. Showing only watchlist entries for this supplier.'),
+      message: h('span', null, 'Scoped to ', h('b', null, focusedSupplier.name), ' from the map. Showing only watchlist entries for this supplier - stats below reflect this scope.'),
       action: h(Button, { size: 'small', type: 'text', onClick: props.clearSupplierFocus }, 'Clear filter')
     }) : null,
+
+    h('div', { className: 'stats-row' },
+      h(StatCard, { label: props.supplierFocus ? 'On Watchlist (scoped)' : 'On Watchlist', value: statSource.length, color: 'primary' }),
+      h(StatCard, { label: 'Unreviewed', value: statUnreviewed, color: 'danger' }),
+      h(StatCard, { label: 'No Alternate', value: statSource.filter(function(c) { return c.alternateStatus === 'None'; }).length, color: 'warning', sub: 'Sole-source exposure' }),
+      h(StatCard, { label: 'Revenue at Risk', value: fmt$(statSource.reduce(function(s, c) { return s + (c.revenueAtRisk || 0); }, 0)), color: 'danger' })
+    ),
 
     h('div', { style: { display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' } },
       h(Select, {
@@ -1144,14 +1150,16 @@ function AlertsTab(props) {
     }) : null,
 
     h('div', { className: 'alert-fatigue-header' },
-      h('span', null, h('b', null, filtered.length + ' alerts today'), '. Calibrated to 3 to 7 high-signal events per user per day. Every alert is mapped to the affected ingredient and drug product, with source citations.')
+      props.supplierFocus
+        ? h('span', null, h('b', null, filtered.length + (filtered.length === 1 ? ' alert' : ' alerts') + ' for this supplier'), '. Clear the filter above to see all of today\'s alerts. Every alert is mapped to the affected ingredient and drug product, with source citations.')
+        : h('span', null, h('b', null, filtered.length + (filtered.length === 1 ? ' alert' : ' alerts') + ' today'), '. Calibrated to 3 to 7 high-signal events per user per day. Every alert is mapped to the affected ingredient and drug product, with source citations.')
     ),
 
     h('div', { className: 'stats-row' },
-      h(StatCard, { label: 'Total Alerts', value: filtered.length, color: 'primary' }),
+      h(StatCard, { label: props.supplierFocus ? 'Alerts (scoped)' : 'Total Alerts', value: filtered.length, color: 'primary' }),
       h(StatCard, { label: 'Critical', value: filtered.filter(function(a) { return a.severity === 'critical'; }).length, color: 'danger' }),
       h(StatCard, { label: 'High', value: filtered.filter(function(a) { return a.severity === 'high'; }).length, color: 'warning' }),
-      h(StatCard, { label: 'Reviewed', value: items.filter(function(a) { return a.reviewedAt; }).length, color: 'success' })
+      h(StatCard, { label: 'Reviewed', value: filtered.filter(function(a) { return a.reviewedAt; }).length, color: 'success' })
     ),
 
     h('div', { style: { display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' } },
@@ -1868,6 +1876,37 @@ function App() {
     ? alerts.filter(function(a) { return roleAlertTypes.indexOf(a.type) !== -1; })
     : alerts;
   var activeAlerts = roleFilteredAlerts.filter(function(a) { return !a.dismissedAt && !a.reviewedAt; }).length;
+  // Scoped counts when a supplier filter is active (from a map drill-in).
+  // Keeps tab badges honest with what the user actually sees inside the tab.
+  var scopedUnreviewed = supplierFocus
+    ? watchlist.filter(function(c) { return c.supplierId === supplierFocus && !c.reviewedAt && !c.dismissedAt; }).length
+    : null;
+  var scopedActiveAlerts = supplierFocus
+    ? roleFilteredAlerts.filter(function(a) { return a.supplierId === supplierFocus && !a.dismissedAt && !a.reviewedAt; }).length
+    : null;
+  // Badge renderer - shows "scoped / total" when filtered, plain count otherwise.
+  function scopedBadge(scoped, total, bg) {
+    if (total <= 0 && (scoped === null || scoped <= 0)) return null;
+    if (scoped === null) {
+      return h(Badge, { count: total, size: 'small', style: Object.assign({ marginLeft: 6 }, bg ? { background: bg } : {}) });
+    }
+    return h(Tooltip, { title: 'Scoped to selected supplier - ' + scoped + ' of ' + total + ' shown. Clear the filter inside the tab to see all.' },
+      h('span', {
+        style: {
+          marginLeft: 6,
+          background: bg || '#3B3BD3',
+          color: '#FFFFFF',
+          borderRadius: 10,
+          padding: '0 8px',
+          fontSize: 11,
+          lineHeight: '18px',
+          display: 'inline-block',
+          fontWeight: 600,
+          cursor: 'help',
+        }
+      }, scoped + ' / ' + total)
+    );
+  }
   var userObj = me && me.user ? me.user : null;
 
   var tabItems = [
@@ -1878,12 +1917,12 @@ function App() {
     },
     {
       key: 'watchlist',
-      label: h('span', null, 'Daily Watchlist', unreviewed > 0 ? h(Badge, { count: unreviewed, size: 'small', style: { marginLeft: 6, background: '#C20A29' } }) : null),
+      label: h('span', null, 'Daily Watchlist', scopedBadge(scopedUnreviewed, unreviewed, '#C20A29')),
       children: h(WatchlistTab, { watchlist: watchlist, setWatchlist: setWatchlist, setSuppliers: setSuppliers, supplierFocus: supplierFocus, clearSupplierFocus: function() { setSupplierFocus(null); }, suppliers: suppliers, role: role, user: userObj, onActionLogged: bumpFeedback }),
     },
     {
       key: 'alerts',
-      label: h('span', null, 'Alerts', activeAlerts > 0 ? h(Badge, { count: activeAlerts, size: 'small', style: { marginLeft: 6 } }) : null),
+      label: h('span', null, 'Alerts', scopedBadge(scopedActiveAlerts, activeAlerts)),
       children: h(AlertsTab, { alerts: roleFilteredAlerts, setAlerts: setAlerts, setSuppliers: setSuppliers, supplierFocus: supplierFocus, clearSupplierFocus: function() { setSupplierFocus(null); }, suppliers: suppliers, role: role, user: userObj, onActionLogged: bumpFeedback }),
     },
     {
