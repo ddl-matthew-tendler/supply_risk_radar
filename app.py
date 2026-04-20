@@ -1,14 +1,50 @@
 import os
 import json
+import time
+from datetime import datetime, timezone
+from pathlib import Path
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 import httpx
 
 app = FastAPI()
 
 DOMINO_API_HOST = os.environ.get("DOMINO_API_HOST", "http://localhost:8899")
-actions_log = []
+
+# ── P3A: Governed audit log ──────────────────────────────────────────────────
+# In production this writes to a Domino Dataset. For now we persist to a local
+# JSONL file so actions survive reloads and can be inspected by compliance.
+AUDIT_PATH = Path(os.environ.get("SRR_AUDIT_PATH", "/tmp/srr_audit_log.jsonl"))
+WEBHOOK_PATH = Path(os.environ.get("SRR_WEBHOOK_PATH", "/tmp/srr_webhook_log.jsonl"))
+
+
+def _append_jsonl(path: Path, entry: dict) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a") as f:
+            f.write(json.dumps(entry) + "\n")
+    except Exception as e:
+        print(f"[audit-write-error] {e}")
+
+
+def _read_jsonl(path: Path) -> list:
+    if not path.exists():
+        return []
+    out = []
+    try:
+        with path.open("r") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    out.append(json.loads(line))
+                except Exception:
+                    continue
+    except Exception as e:
+        print(f"[audit-read-error] {e}")
+    return out
 
 
 def get_auth_headers():
@@ -67,17 +103,160 @@ def get_exec_brief():
     return JSONResponse(content=_load_mock("exec_brief"))
 
 
+# ── P3A: Governed audit Dataset (JSONL stand-in) ─────────────────────────────
 @app.post("/api/actions")
 async def log_action(request: Request):
     body = await request.json()
-    actions_log.append(body)
+    body.setdefault("timestamp", datetime.now(timezone.utc).isoformat())
+    body.setdefault("actionId", f"act_{int(time.time() * 1000)}")
+    _append_jsonl(AUDIT_PATH, body)
     print(f"[ACTION] {json.dumps(body)}")
-    return {"status": "logged", "count": len(actions_log)}
+    return {"status": "logged", "actionId": body["actionId"], "persistedTo": "governed-audit-dataset"}
 
 
 @app.get("/api/actions")
 def get_actions():
-    return {"actions": actions_log}
+    entries = _read_jsonl(AUDIT_PATH)
+    return {"actions": entries, "count": len(entries), "source": str(AUDIT_PATH)}
+
+
+# ── P3B: Weekly retraining status ────────────────────────────────────────────
+@app.get("/api/retraining/status")
+def retraining_status():
+    """Status of the weekly risk-fusion retraining Job.
+
+    In production this pulls from Domino Experiments + Model Registry.
+    Here we synthesize plausible values that tie to the audit log volume.
+    """
+    actions = _read_jsonl(AUDIT_PATH)
+    feedback_samples = len(actions)
+    now = datetime.now(timezone.utc)
+
+    return {
+        "champion": {
+            "modelName": "risk-fusion-scorer",
+            "version": "v3.4.1",
+            "registryUri": "mlflow://models/risk-fusion-scorer/3.4.1",
+            "registeredAt": "2026-04-12T03:14:00Z",
+            "metrics": {"aucRoc": 0.891, "precisionAt10": 0.78, "brierScore": 0.112},
+        },
+        "challenger": {
+            "modelName": "risk-fusion-scorer",
+            "version": "v3.5.0-rc",
+            "status": "awaiting-promotion-review",
+            "metrics": {"aucRoc": 0.902, "precisionAt10": 0.81, "brierScore": 0.104},
+            "delta": "+1.1 AUC, +3pp P@10 vs champion",
+        },
+        "lastRetrainedAt": "2026-04-13T02:00:00Z",
+        "nextScheduledAt": "2026-04-20T02:00:00Z",
+        "cadence": "weekly (Sunday 02:00 UTC)",
+        "feedback": {
+            "totalSamples": feedback_samples,
+            "newSinceLastRun": feedback_samples,
+            "truePositiveRate": 0.74,
+            "falsePositiveRate": 0.11,
+            "preferencePairs": max(0, feedback_samples - 3),
+        },
+        "drift": {
+            "signalDistributionPsi": 0.08,
+            "status": "within-tolerance",
+            "threshold": 0.2,
+        },
+        "llmReasoner": {
+            "modelName": "mitigation-writer-llm",
+            "version": "v2.1",
+            "preferencePairsSinceLastTune": max(0, feedback_samples - 3),
+            "nextTuneScheduled": "2026-04-27T04:00:00Z",
+        },
+    }
+
+
+@app.post("/api/retraining/trigger")
+def retraining_trigger():
+    """API_PENDING: In production this kicks off a Domino Job.
+    The UI shows 'API Pending' — we log the intent for audit only."""
+    entry = {
+        "kind": "retraining-trigger",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "status": "api_pending",
+    }
+    _append_jsonl(AUDIT_PATH, entry)
+    return {"status": "api_pending", "message": "Domino Job trigger API is pending deployment."}
+
+
+# ── P3C: Outbound webhooks (CAPA, Teams, Anaplan, SharePoint) ────────────────
+_WEBHOOK_TARGETS = {
+    "capa": {
+        "system": "Procurement CAPA",
+        "statusOnSend": "api_pending",
+        "note": "Outbound webhook to procurement CAPA system is pending.",
+    },
+    "teams": {
+        "system": "Microsoft Teams",
+        "statusOnSend": "api_pending",
+        "note": "Teams channel webhook is pending configuration.",
+    },
+    "anaplan": {
+        "system": "Anaplan FP&A",
+        "statusOnSend": "api_pending",
+        "note": "Anaplan export connector is pending.",
+    },
+    "sharepoint": {
+        "system": "SharePoint",
+        "statusOnSend": "api_pending",
+        "note": "SharePoint distribution webhook is pending.",
+    },
+}
+
+
+@app.post("/api/webhooks/{target}")
+async def dispatch_webhook(target: str, request: Request):
+    body = await request.json()
+    cfg = _WEBHOOK_TARGETS.get(target)
+    if not cfg:
+        return JSONResponse(status_code=404, content={"error": f"unknown webhook target: {target}"})
+    entry = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "target": target,
+        "system": cfg["system"],
+        "status": cfg["statusOnSend"],
+        "payload": body,
+    }
+    _append_jsonl(WEBHOOK_PATH, entry)
+    print(f"[WEBHOOK] {json.dumps(entry)}")
+    return {"status": cfg["statusOnSend"], "system": cfg["system"], "note": cfg["note"]}
+
+
+@app.get("/api/webhooks")
+def list_webhook_deliveries():
+    return {"deliveries": _read_jsonl(WEBHOOK_PATH), "targets": _WEBHOOK_TARGETS}
+
+
+# ── P3D: Role / RBAC scaffold ────────────────────────────────────────────────
+@app.get("/api/me")
+def get_me():
+    """Current user + inferred role.
+
+    In production this reads SSO claims (Okta / Azure AD groups) and maps them
+    to app roles. For now we return the logged-in Domino user and let the
+    client pick a role for demo purposes.
+    """
+    user = get_user()
+    return {
+        "user": user,
+        "defaultRole": "supply_chain_analyst",
+        "availableRoles": [
+            {"id": "supply_chain_analyst", "label": "Supply Chain Analyst",
+             "scope": "All supplier risk + watchlist + tariff"},
+            {"id": "quality_lead", "label": "Quality Lead",
+             "scope": "Regulatory + FDA 483 + CAPA-track alerts"},
+            {"id": "regulatory_affairs", "label": "Regulatory Affairs",
+             "scope": "Regulatory alerts + DMF-impacting findings"},
+            {"id": "procurement_exec", "label": "Procurement Executive",
+             "scope": "Exec brief + tariff scenarios + top-5 risks"},
+        ],
+        "ssoStatus": "api_pending",
+    }
 
 
 def _load_mock(key):

@@ -147,7 +147,112 @@ var API_GAPS = {
   exportTariff:     { label: 'Export to Anaplan',  message: 'Coming soon - FP&A export API is in development.', ready: false },
   bulkDismiss:      { label: 'Bulk Dismiss',       message: 'Coming soon - bulk write API is pending.', ready: false },
   liveScoring:      { label: 'Live Re-score',      message: 'Coming soon - real-time ML scoring service is in development.', ready: false },
+  triggerRetrain:   { label: 'Trigger Retraining', message: 'Coming soon - Domino Job trigger API is pending deployment.', ready: false },
+  promoteChallenger:{ label: 'Promote Challenger', message: 'Coming soon - Model Registry promotion requires human approval workflow.', ready: false },
+  capaWebhook:      { label: 'Send to CAPA',       message: 'Coming soon - procurement CAPA system webhook is pending.', ready: false },
+  teamsWebhook:     { label: 'Post to Teams',      message: 'Coming soon - Teams channel webhook is pending configuration.', ready: false },
+  anaplanWebhook:   { label: 'Export to Anaplan',  message: 'Coming soon - Anaplan export connector is pending.', ready: false },
+  ssoRbac:          { label: 'SSO role binding',   message: 'Coming soon - SSO (Okta / Azure AD) role mapping is pending.', ready: false },
 };
+
+// ── P3A/P3C: Action + webhook helpers ─────────────────────────────────────────
+function postAction(entry) {
+  return fetch('/api/actions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(entry)
+  }).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; });
+}
+
+function dispatchWebhook(target, payload) {
+  return fetch('/api/webhooks/' + target, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; });
+}
+
+// Pharma supply-chain category glossary. "API" here means active
+// pharmaceutical ingredient (not the software term); "KSM" means key starting
+// material. Surface the long form everywhere these show up.
+var CATEGORY_META = {
+  API:       { full: 'Active Pharmaceutical Ingredient',    short: 'API',       desc: 'The biologically active molecule in a finished drug product.' },
+  KSM:       { full: 'Key Starting Material',               short: 'KSM',       desc: 'An upstream chemical used to synthesize the API.' },
+  Excipient: { full: 'Excipient',                           short: 'Excipient', desc: 'Inactive ingredients in the formulation (binders, fillers, stabilizers).' },
+  CMO:       { full: 'Contract Manufacturing Organization', short: 'CMO',       desc: 'A third-party manufacturer that produces or fills drug product on behalf of the sponsor.' },
+  Packaging: { full: 'Packaging',                           short: 'Packaging', desc: 'Primary or secondary container components (vials, blisters, labels).' },
+};
+function categoryFull(cat) { var m = CATEGORY_META[cat]; return m ? m.full + ' (' + m.short + ')' : (cat || ''); }
+function categoryDesc(cat) { var m = CATEGORY_META[cat]; return m ? m.desc : ''; }
+
+// Demo-only: how much an action reduces a supplier's risk score, plus any
+// alternate-status change. Applied locally so users see their action stick.
+function actionImpact(action) {
+  var map = {
+    switch:       { delta: 42, altStatus: 'Qualified',       note: 'Source switched to qualified alternate' },
+    alt_qual:     { delta: 22, altStatus: 'In Qualification', note: 'Alternate qualification initiated' },
+    safety_stock: { delta: 20, note: 'Safety stock authorized' },
+    capa_request: { delta: 16, note: 'CAPA requested from supplier' },
+    bcp:          { delta: 18, note: 'BCP activated' },
+    escalated:    { delta: 10, note: 'Escalated to leadership' },
+    regulatory:   { delta: 12, note: 'Regulatory affairs engaged' },
+    monitor:      { delta: 3,  note: 'Monitoring — no change' },
+  };
+  return map[action] || { delta: 5, note: 'Action logged' };
+}
+
+function riskLevelFromScore(s) {
+  if (s >= 80) return 'critical';
+  if (s >= 60) return 'high';
+  if (s >= 40) return 'medium';
+  return 'low';
+}
+
+// Apply an action's risk-reduction to a supplier (by id). Updates score, level,
+// alternate status, and clears active events so the bubble stops pulsing.
+function applyActionToSupplier(setSuppliers, supplierId, action) {
+  if (!setSuppliers || !supplierId) return;
+  var impact = actionImpact(action);
+  setSuppliers(function(prev) {
+    return prev.map(function(s) {
+      if (s.id !== supplierId) return s;
+      var newScore = Math.max(10, (s.riskScore || 0) - impact.delta);
+      return Object.assign({}, s, {
+        riskScore: newScore,
+        riskLevel: riskLevelFromScore(newScore),
+        alternateStatus: impact.altStatus || s.alternateStatus,
+        activeEvents: [],
+        actionTakenAt: new Date().toISOString(),
+        lastAction: action,
+      });
+    });
+  });
+}
+
+// Map action type (from action dropdowns) to an outbound webhook target.
+function webhookTargetForAction(action) {
+  if (!action) return null;
+  if (action.indexOf('capa') === 0) return 'capa';
+  if (action === 'escalated') return 'teams';
+  if (action === 'alt_qual' || action === 'switch') return 'teams';
+  return null;
+}
+
+// ── P3D: Role definitions (client-side mirror of /api/me) ─────────────────────
+var APP_ROLES = [
+  { id: 'supply_chain_analyst', label: 'Supply Chain Analyst',  scope: 'All supplier risk, watchlist, tariff' },
+  { id: 'quality_lead',         label: 'Quality Lead',          scope: 'Regulatory + FDA 483 + CAPA alerts' },
+  { id: 'regulatory_affairs',   label: 'Regulatory Affairs',    scope: 'Regulatory alerts + DMF-impacting findings' },
+  { id: 'procurement_exec',     label: 'Procurement Executive', scope: 'Exec brief + tariff + top-5 risks' },
+];
+
+// Which alert types a role cares about. Used as a view filter, not as access control.
+function alertTypesForRole(roleId) {
+  if (roleId === 'quality_lead')      return ['Regulatory', 'Operational'];
+  if (roleId === 'regulatory_affairs') return ['Regulatory'];
+  if (roleId === 'procurement_exec')   return ['Tariff', 'Geopolitical', 'Regulatory'];
+  return null; // analyst sees all
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function fmt$(n) {
@@ -250,6 +355,29 @@ function AboutModal(props) {
         )
       ),
 
+      sec('Where this data actually comes from in the real world',
+        h('p', { className: 'about-para' },
+          'Real pharma supply risk data is sourced across four layers. A production deployment of Supply Risk Radar would subscribe to a mix of these, then let Domino handle the fusion.'
+        ),
+        h('div', null,
+          row('Free public APIs',
+            'openFDA, FDA FOIA, EMA EudraGMDP, MHRA inspection feeds, NOAA and JMA weather, USGS seismic, USTR and WTO tariff schedules, ClinicalTrials.gov. Pulled directly by scheduled ingestion jobs, no broker needed.'
+          ),
+          row('Licensed news and trade data',
+            'Bloomberg Terminal, LSEG (Refinitiv), Factiva, LexisNexis for global news. GDELT for open-source event data. S&P Panjiva for import-export shipment records derived from customs filings, which tell you who ships what to whom at the bill-of-lading level.'
+          ),
+          row('Supply-chain risk intelligence vendors',
+            'This is the "broker" layer. Everstream Analytics, Resilinc, Interos, Exiger, Sphera (formerly riskmethods), and Sayari scrape, enrich, entity-resolve, and score supplier risk. Pharma-specific: IQVIA and Clarivate Cortellis. Financial health and sanctions: Dun & Bradstreet. Most large pharmas subscribe to one or two of these.'
+          ),
+          row('Internal enterprise systems',
+            'The half no vendor can give you: SAP or Oracle ERP for the ingredient list, approved suppliers, spend, and purchase orders. LIMS and quality systems for historical CAPAs and deviations. The commercial data warehouse for revenue and demand plans.'
+          )
+        ),
+        h('p', { className: 'about-para', style: { marginTop: 10 } },
+          'The real value of this app is the fusion across those layers: taking a 483 from openFDA, resolving "Aurobindo Unit VII" to the sponsor\'s internal supplier ID via a broker like Resilinc, then joining to the SAP ingredient list to answer "which of our drugs is exposed, and how much revenue is at risk." That fusion is what Domino orchestrates. It is not something you buy off the shelf.'
+        )
+      ),
+
       sec('Where the AI and ML sit',
         h('ul', { className: 'about-list' },
           h('li', null, h('strong', null, 'Risk fusion scorer'), ': an XGBoost gradient-boosted model that turns the raw signals (inspection findings, weather severity, news sentiment, tariff delta, spend, sole-source flag) into a 0-100 risk score for every supplier-drug pair.'),
@@ -318,7 +446,7 @@ function AboutModal(props) {
           h('li', null, 'Mount the sponsor ingredient list, approved supplier list, and qualified-alternates tables as Datasets or External Data Volumes.'),
           h('li', null, 'Publish the three models (risk-fusion scorer, LLM reasoner, tariff calculator) as Domino Model APIs from governance-approved bundles.'),
           h('li', null, 'Configure scheduled jobs for openFDA, NOAA, USTR, and news ingestion, with credentials in the Domino secret store.'),
-          h('li', null, 'Enable write endpoints on the Domino governance API so action logging persists beyond localStorage (see API Pending badges).'),
+          h('li', null, 'Promote outbound webhooks (CAPA, Teams, Anaplan, SharePoint) from API Pending to production - see Feedback and Models tab for current webhook delivery status.'),
           h('li', null, 'Wire SSO and role-based access so procurement, quality, and regulatory see role-appropriate views.')
         )
       ),
@@ -349,9 +477,43 @@ function WorldMapTab(props) {
   var _mapReady = useState(false); var mapReady = _mapReady[0]; var setMapReady = _mapReady[1];
   var _mapData = useState(null); var mapData = _mapData[0]; var setMapData = _mapData[1];
 
-  var _dr = useState(null); var drawerSupplier = _dr[0]; var setDrawerSupplier = _dr[1];
+  var _dr = useState(null); var drawerSupplierId = _dr[0]; var setDrawerSupplierId = _dr[1];
   var _cf = useState('All'); var catFilter = _cf[0]; var setCatFilter = _cf[1];
   var _rf = useState('All'); var riskFilter = _rf[0]; var setRiskFilter = _rf[1];
+  var _dam = useState(false); var drawerActionOpen = _dam[0]; var setDrawerActionOpen = _dam[1];
+  var _drawerForm = Form.useForm(); var drawerForm = _drawerForm[0];
+
+  // Resolve drawer supplier from live suppliers so map updates reflect in the drawer.
+  var drawerSupplier = drawerSupplierId ? suppliers.find(function(s) { return s.id === drawerSupplierId; }) : null;
+  function setDrawerSupplier(s) { setDrawerSupplierId(s ? s.id : null); }
+
+  function submitDrawerAction(values) {
+    if (!drawerSupplier) return;
+    var impact = actionImpact(values.action);
+    var entry = {
+      kind: 'map_action',
+      supplierId: drawerSupplier.id,
+      supplier: drawerSupplier.name,
+      action: values.action,
+      rationale: values.rationale,
+      role: props.role || 'supply_chain_analyst',
+      user: (props.user && props.user.userName) || 'demo_user',
+    };
+    postAction(entry).then(function(resp) {
+      var target = webhookTargetForAction(values.action);
+      if (target) {
+        dispatchWebhook(target, { actionId: resp && resp.actionId, supplier: drawerSupplier.name, action: values.action, rationale: values.rationale }).then(function() {
+          message.success('Logged. ' + impact.note + ' - risk reduced by ' + impact.delta + '. Webhook queued to ' + target + '.');
+        });
+      } else {
+        message.success('Logged. ' + impact.note + ' - risk reduced by ' + impact.delta + '.');
+      }
+      if (props.onActionLogged) props.onActionLogged();
+    });
+    applyActionToSupplier(props.setSuppliers, drawerSupplier.id, values.action);
+    setDrawerActionOpen(false);
+    drawerForm.resetFields();
+  }
 
   var filtered = useMemo(function() {
     return suppliers.filter(function(s) {
@@ -387,7 +549,7 @@ function WorldMapTab(props) {
 
     var points = filtered.map(function(s) {
       var baseRadius = s.riskLevel === 'critical' ? 13 : s.riskLevel === 'high' ? 10 : s.riskLevel === 'medium' ? 8 : 6;
-      var cls = (s.riskLevel === 'critical' || s.riskLevel === 'high') ? ('risk-pulse risk-pulse-' + s.riskLevel) : '';
+      var cls = s.riskLevel === 'critical' ? 'risk-pulse risk-pulse-critical' : '';
       return {
         name: s.shortName || s.name,
         lat: s.lat,
@@ -478,7 +640,7 @@ function WorldMapTab(props) {
     if (!hcMap.current || !mapReady) return;
     var points = filtered.map(function(s) {
       var baseRadius = s.riskLevel === 'critical' ? 13 : s.riskLevel === 'high' ? 10 : s.riskLevel === 'medium' ? 8 : 6;
-      var cls = (s.riskLevel === 'critical' || s.riskLevel === 'high') ? ('risk-pulse risk-pulse-' + s.riskLevel) : '';
+      var cls = s.riskLevel === 'critical' ? 'risk-pulse risk-pulse-critical' : '';
       return {
         name: s.shortName || s.name,
         lat: s.lat,
@@ -503,19 +665,31 @@ function WorldMapTab(props) {
 
     h('div', { className: 'map-controls' },
       h(Select, {
-        value: catFilter, onChange: setCatFilter, style: { width: 160 },
-        options: ['All', 'API', 'KSM', 'Excipient', 'CMO', 'Packaging'].map(function(v) { return { label: v === 'All' ? 'All Categories' : v, value: v }; })
+        value: catFilter, onChange: setCatFilter, style: { width: 260 },
+        optionLabelProp: 'label',
+        options: [
+          { label: 'All categories', value: 'All' },
+          { label: 'Active pharmaceutical ingredient (API)', value: 'API', title: CATEGORY_META.API.desc },
+          { label: 'Key starting material (KSM)', value: 'KSM', title: CATEGORY_META.KSM.desc },
+          { label: 'Excipient', value: 'Excipient', title: CATEGORY_META.Excipient.desc },
+          { label: 'Contract manufacturing organization (CMO)', value: 'CMO', title: CATEGORY_META.CMO.desc },
+          { label: 'Packaging', value: 'Packaging', title: CATEGORY_META.Packaging.desc },
+        ]
       }),
       h(Select, {
         value: riskFilter, onChange: setRiskFilter, style: { width: 160 },
         options: [
-          { label: 'All Risk Levels', value: 'All' },
+          { label: 'All risk levels', value: 'All' },
           { label: 'Critical', value: 'critical' },
           { label: 'High', value: 'high' },
           { label: 'Medium', value: 'medium' },
           { label: 'Low', value: 'low' },
         ]
       }),
+      h('div', { style: { fontSize: 11, color: '#7F8385', lineHeight: 1.4, maxWidth: 420 } },
+        h('b', null, 'In pharma supply chains: '),
+        'API = active pharmaceutical ingredient (the drug molecule), KSM = key starting material (upstream input), CMO = contract manufacturer.'
+      ),
       h('div', { className: 'map-legend', style: { marginLeft: 'auto' } },
         h('span', { style: { fontSize: 11, fontWeight: 600, color: '#8F8FA3', marginRight: 4 } }, 'Legend'),
         ['critical', 'high', 'medium', 'low'].map(function(lvl) {
@@ -535,9 +709,19 @@ function WorldMapTab(props) {
       onClose: function() { setDrawerSupplier(null); },
       title: drawerSupplier ? h('span', null, countryFlag(drawerSupplier.country), ' ', drawerSupplier.name) : '',
       width: 420,
-      extra: drawerSupplier ? h(Tag, { color: drawerSupplier.riskLevel === 'critical' ? 'error' : drawerSupplier.riskLevel === 'high' ? 'warning' : 'default' }, 'Risk: ' + (drawerSupplier.riskScore || '-')) : null,
+      extra: drawerSupplier ? h(Tag, { color: drawerSupplier.riskLevel === 'critical' ? 'error' : drawerSupplier.riskLevel === 'high' ? 'warning' : drawerSupplier.riskLevel === 'low' ? 'success' : 'default' }, 'Risk: ' + (drawerSupplier.riskScore || '-')) : null,
+      footer: drawerSupplier ? h('div', { style: { display: 'flex', justifyContent: 'flex-end', gap: 8 } },
+        h(Button, { onClick: function() { setDrawerSupplier(null); } }, 'Close'),
+        h(Button, { type: 'primary', onClick: function() { setDrawerActionOpen(true); drawerForm.resetFields(); } }, 'Take action')
+      ) : null,
     },
       drawerSupplier ? h('div', null,
+        drawerSupplier.actionTakenAt ? h(Alert, {
+          type: 'success', showIcon: true,
+          message: 'Mitigation logged',
+          description: 'Risk score dropped to ' + drawerSupplier.riskScore + '. ' + (actionImpact(drawerSupplier.lastAction).note) + '.',
+          style: { marginBottom: 12 }
+        }) : null,
         h('div', { style: { display: 'flex', gap: 12, marginBottom: 16 } },
           h('div', { style: { flex: 1 } },
             h('div', { className: 'section-label' }, 'Risk score'),
@@ -545,7 +729,8 @@ function WorldMapTab(props) {
           ),
           h('div', { style: { flex: 1 } },
             h('div', { className: 'section-label' }, 'Category'),
-            h('div', { style: { fontSize: 16, fontWeight: 600, marginTop: 4 } }, drawerSupplier.category)
+            h('div', { style: { fontSize: 14, fontWeight: 600, marginTop: 4, lineHeight: 1.3 } }, categoryFull(drawerSupplier.category)),
+            h('div', { style: { fontSize: 11, color: '#7F8385', marginTop: 2, lineHeight: 1.4 } }, categoryDesc(drawerSupplier.category))
           ),
           h('div', { style: { flex: 1 } },
             h('div', { className: 'section-label' }, 'Annual spend'),
@@ -585,6 +770,40 @@ function WorldMapTab(props) {
           )
         ) : null
       ) : null
+    ),
+
+    // Map drawer action modal
+    h(Modal, {
+      open: drawerActionOpen,
+      onCancel: function() { setDrawerActionOpen(false); },
+      title: drawerSupplier ? 'Take action - ' + drawerSupplier.name : '',
+      onOk: function() { drawerForm.submit(); },
+      okText: 'Log action',
+    },
+      drawerSupplier ? h(Form, { form: drawerForm, layout: 'vertical', onFinish: submitDrawerAction },
+        h('div', { style: { background: '#F5F5F5', borderRadius: 6, padding: '10px 12px', marginBottom: 16, fontSize: 12 } },
+          h('div', null, h('b', null, 'Supplier: '), drawerSupplier.name, ' (', drawerSupplier.country, ')'),
+          h('div', null, h('b', null, 'Current risk: '), drawerSupplier.riskScore, ' · ', h('b', null, 'Category: '), drawerSupplier.category)
+        ),
+        h(Form.Item, { label: 'Action taken', name: 'action', rules: [{ required: true, message: 'Select an action' }] },
+          h(Select, {
+            placeholder: 'Select an action...',
+            options: [
+              { label: 'Switch order to alternate supplier (-42 risk)', value: 'switch' },
+              { label: 'Initiate alternate qualification project (-22)', value: 'alt_qual' },
+              { label: 'Authorize safety stock build (-20)', value: 'safety_stock' },
+              { label: 'Activate BCP - business continuity protocol (-18)', value: 'bcp' },
+              { label: 'Request CAPA from supplier quality team (-16)', value: 'capa_request' },
+              { label: 'Engage regulatory affairs for DMF review (-12)', value: 'regulatory' },
+              { label: 'Escalate to CPO / procurement leadership (-10)', value: 'escalated' },
+              { label: 'Monitor - no action required', value: 'monitor' },
+            ]
+          })
+        ),
+        h(Form.Item, { label: 'Rationale', name: 'rationale', rules: [{ required: true, message: 'Rationale is required for the audit trail' }] },
+          h(Input.TextArea, { rows: 3, placeholder: 'Describe why this action was taken and what data informed the decision...' })
+        )
+      ) : null
     )
   );
 }
@@ -593,14 +812,12 @@ function WorldMapTab(props) {
 // TAB 2 - Daily Watchlist
 // ════════════════════════════════════════════════════════════════════════════════
 function WatchlistTab(props) {
-  var watchlist = props.watchlist;
-  var _items = useState(watchlist); var items = _items[0]; var setItems = _items[1];
+  var items = props.watchlist;
+  var setItems = props.setWatchlist;
   var _ef = useState(null); var expandedId = _ef[0]; var setExpandedId = _ef[1];
   var _af = useState('all'); var altFilter = _af[0]; var setAltFilter = _af[1];
   var _modal = useState(null); var actionModal = _modal[0]; var setActionModal = _modal[1];
   var _form = Form.useForm(); var form = _form[0];
-
-  useEffect(function() { setItems(watchlist); }, [watchlist]);
 
   var filtered = useMemo(function() {
     if (altFilter === 'all') return items;
@@ -621,11 +838,46 @@ function WatchlistTab(props) {
   }
 
   function submitAction(values) {
-    var entry = { type: 'watchlist_action', rank: actionModal.rank, supplier: actionModal.supplierName, drug: actionModal.drugProductName, rationale: values.rationale, action: values.action, timestamp: new Date().toISOString() };
-    try { var log = JSON.parse(localStorage.getItem('srr_audit_log') || '[]'); log.push(entry); localStorage.setItem('srr_audit_log', JSON.stringify(log)); } catch(e) {}
-    fetch('/api/actions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) }).catch(function() {});
-    message.success('Action logged to audit trail');
-    markReviewed(actionModal);
+    var card = actionModal;
+    var impact = actionImpact(values.action);
+    var entry = {
+      kind: 'watchlist_action',
+      rank: card.rank,
+      supplier: card.supplierName,
+      drug: card.drugProductName,
+      action: values.action,
+      rationale: values.rationale,
+      role: props.role || 'supply_chain_analyst',
+      user: (props.user && props.user.userName) || 'demo_user',
+    };
+    postAction(entry).then(function(resp) {
+      var target = webhookTargetForAction(values.action);
+      if (target) {
+        dispatchWebhook(target, { actionId: resp && resp.actionId, supplier: card.supplierName, action: values.action, rationale: values.rationale }).then(function() {
+          message.success('Logged. ' + impact.note + ' - risk reduced by ' + impact.delta + '. Webhook queued to ' + target + '.');
+        });
+      } else {
+        message.success('Logged. ' + impact.note + ' - risk reduced by ' + impact.delta + '.');
+      }
+      if (props.onActionLogged) props.onActionLogged();
+    });
+    // Drop the card's own risk score + mark reviewed + action-taken
+    setItems(function(prev) {
+      return prev.map(function(c) {
+        if (c.rank !== card.rank) return c;
+        var newScore = Math.max(10, (c.riskScore || 0) - impact.delta);
+        return Object.assign({}, c, {
+          riskScore: newScore,
+          riskLevel: riskLevelFromScore(newScore),
+          alternateStatus: impact.altStatus || c.alternateStatus,
+          reviewedAt: new Date().toISOString(),
+          actionTakenAt: new Date().toISOString(),
+          lastAction: values.action,
+        });
+      });
+    });
+    // Mutate the matching supplier so the map bubble updates (color + pulse).
+    applyActionToSupplier(props.setSuppliers, card.supplierId, values.action);
     setActionModal(null);
   }
 
@@ -742,17 +994,18 @@ function WatchlistTab(props) {
 // ════════════════════════════════════════════════════════════════════════════════
 function AlertsTab(props) {
   var alerts = props.alerts;
-  var _items = useState(alerts); var items = _items[0]; var setItems = _items[1];
+  var items = alerts;
+  var setItems = props.setAlerts;
   var _tf = useState('All'); var typeFilter = _tf[0]; var setTypeFilter = _tf[1];
   var _sf = useState('All'); var sevFilter = _sf[0]; var setSevFilter = _sf[1];
   var _modal = useState(null); var actionModal = _modal[0]; var setActionModal = _modal[1];
   var _form = Form.useForm(); var form = _form[0];
   var _auditLog = useState([]); var auditLog = _auditLog[0]; var setAuditLog = _auditLog[1];
-
-  useEffect(function() { setItems(alerts); }, [alerts]);
-  useEffect(function() {
-    try { var log = JSON.parse(localStorage.getItem('srr_audit_log') || '[]'); setAuditLog(log); } catch(e) {}
-  }, []);
+  function refreshAudit() {
+    fetch('/api/actions').then(function(r) { return r.ok ? r.json() : { actions: [] }; })
+      .then(function(d) { setAuditLog(d.actions || []); }).catch(function() {});
+  }
+  useEffect(function() { refreshAudit(); }, []);
 
   var filtered = useMemo(function() {
     return items.filter(function(a) {
@@ -777,11 +1030,36 @@ function AlertsTab(props) {
 
   function submitAction(values) {
     var alert = actionModal;
-    var entry = { type: 'alert_action', alertId: alert.id, supplier: alert.supplierName, alertTitle: alert.title, action: values.action, rationale: values.rationale, timestamp: new Date().toISOString() };
-    try { var log = JSON.parse(localStorage.getItem('srr_audit_log') || '[]'); log.push(entry); localStorage.setItem('srr_audit_log', JSON.stringify(log)); setAuditLog(log); } catch(e) {}
-    fetch('/api/actions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entry) }).catch(function() {});
-    message.success('Action logged to audit trail');
-    markReviewed(alert.id);
+    var impact = actionImpact(values.action);
+    var entry = {
+      kind: 'alert_action',
+      alertId: alert.id,
+      supplier: alert.supplierName,
+      alertTitle: alert.title,
+      action: values.action,
+      rationale: values.rationale,
+      role: props.role || 'supply_chain_analyst',
+      user: (props.user && props.user.userName) || 'demo_user',
+    };
+    postAction(entry).then(function(resp) {
+      var target = webhookTargetForAction(values.action);
+      if (target) {
+        dispatchWebhook(target, { actionId: resp && resp.actionId, supplier: alert.supplierName, alertTitle: alert.title, action: values.action }).then(function() {
+          message.success('Logged. ' + impact.note + ' - risk reduced by ' + impact.delta + '. Webhook queued to ' + target + '.');
+        });
+      } else {
+        message.success('Logged. ' + impact.note + ' - risk reduced by ' + impact.delta + '.');
+      }
+      refreshAudit();
+      if (props.onActionLogged) props.onActionLogged();
+    });
+    // Mark alert as actioned (counts as reviewed) so badge and stats drop.
+    setItems(function(prev) {
+      return prev.map(function(a) {
+        return a.id === alert.id ? Object.assign({}, a, { reviewedAt: new Date().toISOString(), actionTakenAt: new Date().toISOString(), lastAction: values.action }) : a;
+      });
+    });
+    applyActionToSupplier(props.setSuppliers, alert.supplierId, values.action);
     setActionModal(null);
   }
 
@@ -792,8 +1070,7 @@ function AlertsTab(props) {
 
   return h('div', { className: 'tab-pane' },
     h('div', { className: 'alert-fatigue-header' },
-      h('span', { style: { fontSize: 16 } }, '🎯'),
-      h('span', null, h('b', null, filtered.length + ' alerts today'), ' - calibrated to 3–7 high-signal events per user per day. Every alert is BOM-mapped and source-cited.')
+      h('span', null, h('b', null, filtered.length + ' alerts today'), '. Calibrated to 3 to 7 high-signal events per user per day. Every alert is mapped to the affected ingredient and drug product, with source citations.')
     ),
 
     h('div', { className: 'stats-row' },
@@ -856,15 +1133,21 @@ function AlertsTab(props) {
     }),
 
     auditLog.length > 0 ? h('div', { style: { marginTop: 24 } },
-      h('div', { className: 'section-label', style: { marginBottom: 6 } }, 'Audit log'),
+      h('div', { className: 'section-label', style: { marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 } },
+        h('span', null, 'Audit log'),
+        h(Tag, { color: 'purple', style: { fontSize: 10 } }, 'Governed audit Dataset'),
+        h('span', { style: { fontSize: 11, color: '#8F8FA3', fontWeight: 400 } }, auditLog.length + ' entries, inspector-ready')
+      ),
       h('div', { className: 'audit-log' },
-        auditLog.slice().reverse().map(function(entry, i) {
+        auditLog.slice().reverse().slice(0, 20).map(function(entry, i) {
           return h('div', { key: i, className: 'audit-log-entry' },
             h('span', { style: { color: '#6A8FA8' } }, entry.timestamp ? entry.timestamp.slice(0, 19).replace('T', ' ') : ''),
             ' · ',
-            h('span', { style: { color: '#A8E6CF' } }, entry.supplier),
+            h('span', { style: { color: '#A8E6CF' } }, entry.supplier || '-'),
             ' · ',
-            h('span', null, entry.rationale)
+            h('span', { style: { color: '#C0C0D8' } }, entry.role || 'supply_chain_analyst'),
+            ' · ',
+            h('span', null, entry.rationale || entry.action || '')
           );
         })
       )
@@ -1073,6 +1356,156 @@ function ExecBriefTab(props) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
+// TAB 6 - Feedback and Models (Phase 3)
+// ════════════════════════════════════════════════════════════════════════════════
+function FeedbackModelsTab(props) {
+  var _s = useState(null); var status = _s[0]; var setStatus = _s[1];
+  var _a = useState([]); var actions = _a[0]; var setActions = _a[1];
+  var _w = useState([]); var webhooks = _w[0]; var setWebhooks = _w[1];
+
+  function refresh() {
+    fetch('/api/retraining/status').then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(d) { if (d) setStatus(d); }).catch(function() {});
+    fetch('/api/actions').then(function(r) { return r.ok ? r.json() : { actions: [] }; })
+      .then(function(d) { setActions(d.actions || []); }).catch(function() {});
+    fetch('/api/webhooks').then(function(r) { return r.ok ? r.json() : { deliveries: [] }; })
+      .then(function(d) { setWebhooks(d.deliveries || []); }).catch(function() {});
+  }
+  useEffect(function() { refresh(); }, [props.refreshTick]);
+
+  if (!status) return h('div', { className: 'tab-pane' }, h(Spin, { size: 'large' }));
+
+  function triggerRetrain() {
+    fetch('/api/retraining/trigger', { method: 'POST' })
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        message.warning((d && d.message) || API_GAPS.triggerRetrain.message);
+        refresh();
+      });
+  }
+
+  return h('div', { className: 'tab-pane' },
+    h('div', { className: 'alert-fatigue-header' },
+      h('span', null, h('b', null, 'Closed-loop feedback. '), 'User actions land in a governed audit Dataset. A weekly Domino Job retrains the risk-fusion scorer on labeled feedback and drifts the challenger against the champion. Outbound webhooks push approved actions to CAPA, Teams, and Anaplan.')
+    ),
+
+    h('div', { className: 'stats-row' },
+      h(StatCard, { label: 'Feedback samples', value: status.feedback.totalSamples, color: 'primary', sub: 'Since last retrain: ' + status.feedback.newSinceLastRun }),
+      h(StatCard, { label: 'True positive rate', value: (status.feedback.truePositiveRate * 100).toFixed(0) + '%', color: 'success', sub: 'False positive ' + (status.feedback.falsePositiveRate * 100).toFixed(0) + '%' }),
+      h(StatCard, { label: 'Preference pairs', value: status.feedback.preferencePairs, color: 'info', sub: 'For LLM RLHF tuning' }),
+      h(StatCard, { label: 'Signal drift (PSI)', value: status.drift.signalDistributionPsi.toFixed(2), color: status.drift.status === 'within-tolerance' ? 'success' : 'danger', sub: status.drift.status.replace(/-/g, ' ') })
+    ),
+
+    h('div', { className: 'panel', style: { marginBottom: 16 } },
+      h('div', { className: 'panel-header' },
+        h('span', { className: 'panel-title' }, 'Risk fusion scorer - champion vs challenger'),
+        h(Tag, { color: 'blue' }, status.cadence)
+      ),
+      h('div', { style: { padding: '14px 16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 } },
+        h('div', { style: { border: '1px solid #E0E0E0', borderRadius: 6, padding: 12, background: '#FAFAFA' } },
+          h('div', { style: { fontSize: 11, color: '#65657B', fontWeight: 600, marginBottom: 4 } }, 'CHAMPION (in production)'),
+          h('div', { style: { fontSize: 15, fontWeight: 600, color: '#3F4547' } }, status.champion.modelName + ' ' + status.champion.version),
+          h('div', { style: { fontSize: 12, color: '#7F8385', marginBottom: 8 } }, status.champion.registryUri),
+          h('div', { style: { fontSize: 12, color: '#3F4547' } },
+            'AUC ', h('b', null, status.champion.metrics.aucRoc), ' · P@10 ', h('b', null, status.champion.metrics.precisionAt10), ' · Brier ', h('b', null, status.champion.metrics.brierScore)
+          ),
+          h('div', { style: { fontSize: 11, color: '#8F8FA3', marginTop: 6 } }, 'Registered ', dayjs(status.champion.registeredAt).format('MMM D, YYYY'))
+        ),
+        h('div', { style: { border: '1px solid #C9C5F2', borderRadius: 6, padding: 12, background: '#F5F3FD' } },
+          h('div', { style: { fontSize: 11, color: '#1820A0', fontWeight: 600, marginBottom: 4 } }, 'CHALLENGER (awaiting promotion)'),
+          h('div', { style: { fontSize: 15, fontWeight: 600, color: '#3F4547' } }, status.challenger.modelName + ' ' + status.challenger.version),
+          h('div', { style: { fontSize: 12, color: '#7F8385', marginBottom: 8 } }, status.challenger.status),
+          h('div', { style: { fontSize: 12, color: '#3F4547' } },
+            'AUC ', h('b', null, status.challenger.metrics.aucRoc), ' · P@10 ', h('b', null, status.challenger.metrics.precisionAt10), ' · Brier ', h('b', null, status.challenger.metrics.brierScore)
+          ),
+          h('div', { style: { fontSize: 11, color: '#28A464', fontWeight: 600, marginTop: 6 } }, status.challenger.delta)
+        )
+      ),
+      h('div', { style: { display: 'flex', gap: 10, padding: '0 16px 14px', alignItems: 'center', flexWrap: 'wrap' } },
+        h('div', { style: { fontSize: 12, color: '#65657B' } },
+          'Last retrained ', h('b', null, dayjs(status.lastRetrainedAt).format('MMM D')), ' · Next ', h('b', null, dayjs(status.nextScheduledAt).format('MMM D'))
+        ),
+        h('div', { style: { marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' } },
+          h(Tooltip, { title: API_GAPS.triggerRetrain.message },
+            h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 6 } },
+              h(Button, { size: 'small', onClick: triggerRetrain }, 'Trigger retrain now'),
+              h(ApiPendingBadge)
+            )
+          ),
+          h(Tooltip, { title: API_GAPS.promoteChallenger.message },
+            h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 6 } },
+              h(Button, { size: 'small', disabled: true }, 'Promote challenger'),
+              h(ApiPendingBadge)
+            )
+          )
+        )
+      )
+    ),
+
+    h('div', { className: 'panel', style: { marginBottom: 16 } },
+      h('div', { className: 'panel-header' },
+        h('span', { className: 'panel-title' }, 'LLM mitigation writer - preference tuning'),
+        h(Tag, { color: 'blue' }, 'RLHF')
+      ),
+      h('div', { style: { padding: '14px 16px', fontSize: 13, color: '#3F4547', lineHeight: 1.6 } },
+        h('b', null, status.llmReasoner.modelName + ' ' + status.llmReasoner.version),
+        '. ',
+        h('b', null, status.llmReasoner.preferencePairsSinceLastTune),
+        ' preference pairs collected since last tune (user edits and rejections of mitigation suggestions). Next tuning run scheduled for ',
+        h('b', null, dayjs(status.llmReasoner.nextTuneScheduled).format('MMM D, YYYY')),
+        '.'
+      )
+    ),
+
+    h('div', { className: 'panel', style: { marginBottom: 16 } },
+      h('div', { className: 'panel-header' },
+        h('span', { className: 'panel-title' }, 'Outbound webhook deliveries'),
+        h(Tag, { color: 'orange' }, webhooks.length + ' total')
+      ),
+      webhooks.length === 0
+        ? h('div', { style: { padding: '20px 16px', color: '#8F8FA3', fontSize: 13 } }, 'No webhook deliveries yet. Log an action in Watchlist or Alerts to trigger one.')
+        : h(Table, {
+            dataSource: webhooks.slice().reverse().slice(0, 25),
+            rowKey: function(r, i) { return r.timestamp + '-' + i; },
+            size: 'small',
+            pagination: false,
+            columns: [
+              { title: 'Timestamp', dataIndex: 'timestamp', key: 't', width: 170, render: function(v) { return v ? dayjs(v).format('MMM D HH:mm:ss') : '-'; } },
+              { title: 'Target', dataIndex: 'system', key: 's', width: 180 },
+              { title: 'Status', dataIndex: 'status', key: 'st', width: 140, render: function(v) { return v === 'api_pending' ? h(Tag, { color: 'orange' }, 'API pending') : h(Tag, { color: 'success' }, v); } },
+              { title: 'Supplier', dataIndex: ['payload', 'supplier'], key: 'sup', render: function(_, r) { return (r.payload && r.payload.supplier) || '-'; } },
+              { title: 'Action', dataIndex: ['payload', 'action'], key: 'a', render: function(_, r) { return (r.payload && r.payload.action) || '-'; } },
+            ],
+          })
+    ),
+
+    h('div', { className: 'panel' },
+      h('div', { className: 'panel-header' },
+        h('span', { className: 'panel-title' }, 'Governed audit Dataset - recent actions'),
+        h(Tag, { color: 'purple' }, actions.length + ' entries')
+      ),
+      actions.length === 0
+        ? h('div', { style: { padding: '20px 16px', color: '#8F8FA3', fontSize: 13 } }, 'No actions logged yet.')
+        : h(Table, {
+            dataSource: actions.slice().reverse().slice(0, 25),
+            rowKey: 'actionId',
+            size: 'small',
+            pagination: false,
+            columns: [
+              { title: 'Timestamp', dataIndex: 'timestamp', key: 't', width: 170, render: function(v) { return v ? dayjs(v).format('MMM D HH:mm:ss') : '-'; } },
+              { title: 'User', dataIndex: 'user', key: 'u', width: 130 },
+              { title: 'Role', dataIndex: 'role', key: 'r', width: 170, render: function(v) { return v ? v.replace(/_/g, ' ') : '-'; } },
+              { title: 'Kind', dataIndex: 'kind', key: 'k', width: 140 },
+              { title: 'Supplier', dataIndex: 'supplier', key: 'sup' },
+              { title: 'Action', dataIndex: 'action', key: 'a', width: 160 },
+              { title: 'Rationale', dataIndex: 'rationale', key: 'ra', ellipsis: true },
+            ],
+          })
+    )
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
 // DEBUG PANEL
 // ════════════════════════════════════════════════════════════════════════════════
 function DebugPanel(props) {
@@ -1113,8 +1546,12 @@ function DebugPanel(props) {
   }, [logs, open, tab]);
 
   var globals = __debug.getGlobals();
-  var auditLog = [];
-  try { auditLog = JSON.parse(localStorage.getItem('srr_audit_log') || '[]'); } catch(e) {}
+  var _aud = useState([]); var auditLog = _aud[0]; var setAuditLog = _aud[1];
+  useEffect(function() {
+    if (!open) return;
+    fetch('/api/actions').then(function(r) { return r.ok ? r.json() : { actions: [] }; })
+      .then(function(d) { setAuditLog(d.actions || []); }).catch(function() {});
+  }, [open, tab]);
 
   var logColor = { log: '#A8C4E0', info: '#80D4B0', warn: '#FFD080', error: '#FF8080' };
 
@@ -1242,7 +1679,8 @@ function DebugPanel(props) {
           ['Alerts',        appState.alertCount + ' alerts'],
           ['Tariff Scenarios', appState.scenarioCount + ' scenarios'],
           ['Exec Brief',    appState.hasBrief ? 'loaded' : 'not loaded'],
-          ['Audit Log',     appState.auditCount + ' entries (localStorage)'],
+          ['Audit Log',     appState.auditCount + ' entries (governed Dataset)'],
+          ['Role (view-as)', appState.role || 'supply_chain_analyst'],
         ].map(function(row) {
           return h('div', { key: row[0], style: { display: 'flex', gap: 8, padding: '4px 0', borderBottom: '1px solid #1E1E3A', fontSize: 11 } },
             h('span', { style: { color: '#6A6A8A', width: 160 } }, row[0]),
@@ -1258,8 +1696,7 @@ function DebugPanel(props) {
       // AUDIT LOG TAB
       tab === 'audit' ? h('div', null,
         h('div', { style: { display: 'flex', gap: 6, marginBottom: 6 } },
-          h('button', { style: { background: '#2A1A1A', border: '1px solid #4A2A2A', color: '#FF8080', borderRadius: 3, padding: '2px 8px', fontSize: 10, cursor: 'pointer' }, onClick: function() { localStorage.removeItem('srr_audit_log'); setTick(function(t){return t+1;}); } }, 'Clear Audit Log'),
-          h('span', { style: { fontSize: 10, color: '#4A4A6A', alignSelf: 'center' } }, auditLog.length + ' actions logged')
+          h('span', { style: { fontSize: 10, color: '#4A4A6A', alignSelf: 'center' } }, auditLog.length + ' actions logged (governed Dataset)')
         ),
         auditLog.length === 0
           ? h('div', { style: { color: '#4A4A6A', fontSize: 11, padding: 8 } }, 'No audit actions yet. Take an action on a watchlist card or alert.')
@@ -1294,6 +1731,17 @@ function App() {
   var _al = useState([]); var alerts = _al[0]; var setAlerts = _al[1];
   var _ts = useState([]); var tariffScenarios = _ts[0]; var setTariffScenarios = _ts[1];
   var _eb = useState(null); var execBrief = _eb[0]; var setExecBrief = _eb[1];
+
+  // P3D: role + user
+  var _role = useState('supply_chain_analyst'); var role = _role[0]; var setRole = _role[1];
+  var _me = useState(null); var me = _me[0]; var setMe = _me[1];
+  var _fbTick = useState(0); var feedbackTick = _fbTick[0]; var setFeedbackTick = _fbTick[1];
+  function bumpFeedback() { setFeedbackTick(function(t) { return t + 1; }); }
+
+  useEffect(function() {
+    fetch('/api/me').then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(d) { if (d) setMe(d); }).catch(function() {});
+  }, []);
 
   function loadMockData() {
     if (typeof MOCK_SUPPLIERS !== 'undefined') setSuppliers(MOCK_SUPPLIERS);
@@ -1330,24 +1778,30 @@ function App() {
     else fetchLiveData();
   }
 
-  var unreviewed = watchlist.filter(function(c) { return !c.reviewedAt; }).length;
-  var activeAlerts = alerts.filter(function(a) { return !a.dismissedAt; }).length;
+  var unreviewed = watchlist.filter(function(c) { return !c.reviewedAt && !c.dismissedAt; }).length;
+  // P3D: filter alerts by role (view filter, not access control)
+  var roleAlertTypes = alertTypesForRole(role);
+  var roleFilteredAlerts = roleAlertTypes
+    ? alerts.filter(function(a) { return roleAlertTypes.indexOf(a.type) !== -1; })
+    : alerts;
+  var activeAlerts = roleFilteredAlerts.filter(function(a) { return !a.dismissedAt && !a.reviewedAt; }).length;
+  var userObj = me && me.user ? me.user : null;
 
   var tabItems = [
     {
       key: 'map',
       label: h('span', null, 'World Map'),
-      children: loading ? h('div', { style: { textAlign: 'center', padding: 60 } }, h(Spin, { size: 'large' })) : h(WorldMapTab, { suppliers: suppliers }),
+      children: loading ? h('div', { style: { textAlign: 'center', padding: 60 } }, h(Spin, { size: 'large' })) : h(WorldMapTab, { suppliers: suppliers, setSuppliers: setSuppliers, role: role, user: userObj, onActionLogged: bumpFeedback }),
     },
     {
       key: 'watchlist',
       label: h('span', null, 'Daily Watchlist', unreviewed > 0 ? h(Badge, { count: unreviewed, size: 'small', style: { marginLeft: 6, background: '#C20A29' } }) : null),
-      children: h(WatchlistTab, { watchlist: watchlist }),
+      children: h(WatchlistTab, { watchlist: watchlist, setWatchlist: setWatchlist, setSuppliers: setSuppliers, role: role, user: userObj, onActionLogged: bumpFeedback }),
     },
     {
       key: 'alerts',
       label: h('span', null, 'Alerts', activeAlerts > 0 ? h(Badge, { count: activeAlerts, size: 'small', style: { marginLeft: 6 } }) : null),
-      children: h(AlertsTab, { alerts: alerts }),
+      children: h(AlertsTab, { alerts: roleFilteredAlerts, setAlerts: setAlerts, setSuppliers: setSuppliers, role: role, user: userObj, onActionLogged: bumpFeedback }),
     },
     {
       key: 'tariff',
@@ -1359,16 +1813,24 @@ function App() {
       label: 'Executive Brief',
       children: h(ExecBriefTab, { brief: execBrief }),
     },
+    {
+      key: 'feedback',
+      label: h('span', null, 'Feedback & Models'),
+      children: h(FeedbackModelsTab, { refreshTick: feedbackTick }),
+    },
   ];
 
-  var auditCount = 0;
-  try { auditCount = JSON.parse(localStorage.getItem('srr_audit_log') || '[]').length; } catch(e) {}
+  var _ac = useState(0); var auditCount = _ac[0]; var setAuditCount = _ac[1];
+  useEffect(function() {
+    fetch('/api/actions').then(function(r) { return r.ok ? r.json() : { count: 0 }; })
+      .then(function(d) { setAuditCount(d.count || 0); }).catch(function() {});
+  }, [feedbackTick]);
 
   var debugState = {
     useDummy: useDummy, connected: connected, loading: loading, activeTab: activeTab,
     supplierCount: suppliers.length, watchlistCount: watchlist.length,
     alertCount: alerts.length, scenarioCount: tariffScenarios.length,
-    hasBrief: !!execBrief, auditCount: auditCount,
+    hasBrief: !!execBrief, auditCount: auditCount, role: role,
   };
 
   return h(ConfigProvider, { theme: dominoTheme },
@@ -1383,6 +1845,16 @@ function App() {
             ),
             h('div', { className: 'search-card-right' },
               h('div', { style: { fontSize: 12, color: '#65657B' } }, suppliers.length + ' suppliers monitored'),
+              h(Tooltip, { title: API_GAPS.ssoRbac.message },
+                h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 6 } },
+                  h('span', { style: { fontSize: 12, color: '#65657B' } }, 'View as'),
+                  h(Select, {
+                    size: 'small', value: role, onChange: setRole, style: { minWidth: 180 },
+                    options: APP_ROLES.map(function(r) { return { label: r.label, value: r.id, title: r.scope }; })
+                  }),
+                  h(ApiPendingBadge)
+                )
+              ),
               !connected ? h('div', { className: 'dummy-data-toggle', style: { color: '#65657B' } },
                 h('span', null, 'Dummy data'),
                 h(Switch, { checked: useDummy, onChange: handleToggle, size: 'small' })
