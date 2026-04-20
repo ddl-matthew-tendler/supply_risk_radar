@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -X POST \\\\\n  \"http://nucleus-frontend.domino-platform:80/v4/projects/69e51638730d5f79d9bada05/tags\" \\\\\n  -H \"X-Domino-Api-Key: $DOMINO_USER_API_KEY\" \\\\\n  -H \"Content-Type: application/json\" \\\\\n  -d '{\"tagNames\": [\"Phase 2\"]}')",
+      "WebFetch(domain:docs.dominodatalab.com)",
+      "Bash(curl -s \"http://nucleus-frontend.domino-platform:80/api/taxonomy/v1/namespaces\" \\\\\n  -H \"X-Domino-Api-Key: $DOMINO_USER_API_KEY\" | python3 -m json.tool 2>/dev/null || echo \"raw:$\\(curl -s http://nucleus-frontend.domino-platform:80/api/taxonomy/v1/namespaces -H \"X-Domino-Api-Key: $DOMINO_USER_API_KEY\"\\)\")",
+      "Bash(curl -s \"http://nucleus-frontend.domino-platform:80/api/taxonomy/namespaces\" \\\\\n  -H \"X-Domino-Api-Key: $DOMINO_USER_API_KEY\" | python3 -m json.tool 2>/dev/null\ncurl -s \"http://nucleus-frontend.domino-platform:80/v4/taxonomy/namespaces\" \\\\\n  -H \"X-Domino-Api-Key: $DOMINO_USER_API_KEY\" | python3 -m json.tool 2>/dev/null)",
+      "Bash(curl -sv \"http://nucleus-frontend.domino-platform:80/api/taxonomy/v1/tags\" \\\\\n  -H \"X-Domino-Api-Key: $DOMINO_USER_API_KEY\" 2>&1 | tail -20)",
+      "Bash(DOMINO_HOST=\"https://life-sciences-demo.domino-eval.com\"\ncurl -s \"$DOMINO_HOST/api/taxonomy/v1/tags?namespaceId=efd1c66c-b06b-45d2-9275-301db57259be\" \\\\\n  -H \"X-Domino-Api-Key: $DOMINO_USER_API_KEY\")",
+      "Bash(DOMINO_HOST=\"https://life-sciences-demo.domino-eval.com\"\ncurl -s \"$DOMINO_HOST/v4/projects/69e51638730d5f79d9bada05/apps\" \\\\\n  -H \"X-Domino-Api-Key: $DOMINO_USER_API_KEY\")",
+      "Bash(git -C /mnt/code show --stat HEAD~4 -- '.claude/skills/*')",
+      "Bash(find /mnt/code -name \"*.py\" 2>/dev/null | sort)",
+      "Bash(git -C /mnt/code log --oneline -20)",
+      "Bash(pip show:*)",
+      "Bash(env | grep -i domino | sort 2>/dev/null || true)",
+      "Bash(TaskList 2>/dev/null || python3 -c \"import subprocess; r = subprocess.run\\(['task-list'], capture_output=True\\); print\\(r.stdout\\)\" 2>/dev/null || true)",
+      "Bash(curl -s \"http://nucleus-frontend.domino-platform:80/v4/projects/${DOMINO_PROJECT_ID}/jobs?maxResults=10\" \\\\\n  -H \"X-Domino-Api-Key: $DOMINO_USER_API_KEY\" | python3 -m json.tool 2>/dev/null | head -100)",
+      "Read(//mnt/data/**)",
+      "Read(//mnt/artifacts/**)",
+      "Bash(curl -s \"${DOMINO_API_HOST}/v4/projects/${DOMINO_PROJECT_ID}/jobs?maxResults=10\" \\\\\n  -H \"X-Domino-Api-Key: $DOMINO_USER_API_KEY\" 2>&1 | python3 -m json.tool 2>/dev/null || echo \"raw response above\")",
+      "Bash(curl -s \"${DOMINO_API_HOST}/v4/projects/${DOMINO_PROJECT_ID}/jobs?maxResults=10\" \\\\\n  -H \"X-Domino-Api-Key: $DOMINO_USER_API_KEY\" 2>&1 | head -50)",
+      "Bash(curl -s \"${DOMINO_API_HOST}/v4/projects/${DOMINO_PROJECT_ID}/runs?maxResults=10\" \\\\\n  -H \"X-Domino-Api-Key: $DOMINO_USER_API_KEY\" 2>&1 | python3 -m json.tool 2>&1 | head -80)"
+    ]
+  }
+}
