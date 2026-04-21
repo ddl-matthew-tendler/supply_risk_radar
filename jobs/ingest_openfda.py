@@ -392,17 +392,21 @@ def match_to_suppliers(signals: pd.DataFrame, suppliers: pd.DataFrame) -> tuple[
     if signals.empty or suppliers.empty:
         return signals.assign(supplier_id=None, match_score=0.0), pd.DataFrame()
 
-    candidates = (suppliers["name"] + " | " + suppliers["city"] + " | " + suppliers["country"]).tolist()
+    # Normalise to lowercase — rapidfuzz v3 is case-sensitive by default.
+    candidates = (suppliers["name"] + " | " + suppliers["city"] + " | " + suppliers["country"]).str.lower().tolist()
     id_lookup = suppliers["supplier_id"].tolist()
 
     supplier_ids: list[str | None] = []
     scores: list[float] = []
     for _, row in signals.iterrows():
-        query = f"{row['recalling_firm']} | {row['city']} | {row['country']}"
-        if not row["recalling_firm"]:
+        firm = str(row["recalling_firm"] or "").strip()
+        city = str(row["city"] or "").strip()
+        country = str(row["country"] or "").strip()
+        if not firm:
             supplier_ids.append(None)
             scores.append(0.0)
             continue
+        query = f"{firm} | {city} | {country}".lower()
         match = process.extractOne(query, candidates, scorer=fuzz.token_set_ratio)
         if match and match[1] >= MATCH_SCORE_THRESHOLD:
             supplier_ids.append(id_lookup[match[2]])
