@@ -26,6 +26,7 @@ SRR_VOLUME_ROOT = Path(os.environ.get(
     "/mnt/netapp-volumes/Supply_Risk_Radar",
 ))
 SIGNALS_MATCHED = SRR_VOLUME_ROOT / "signals_curated" / "openfda_matched.parquet"
+WL_MATCHED     = SRR_VOLUME_ROOT / "signals_curated" / "fda_warning_letters.parquet"
 OPENFDA_WATERMARK = SRR_VOLUME_ROOT / "state" / "openfda_watermark.json"
 
 app = FastAPI()
@@ -67,10 +68,116 @@ def _read_jsonl(path: Path) -> list:
     return out
 
 
+# ── Alert ETL: supplier/drug lookup + signal → alert schema ──────────────────
+# Seeded from the demo supplier master in mock_data.js; replaced by
+# suppliers_master.parquet in Phase B.
+_SUPPLIER_NAMES: dict[str, str] = {
+    "s001": "Aurobindo Pharma Unit VII",
+    "s002": "Zhejiang Huahai Pharmaceutical",
+    "s003": "Divi's Laboratories Unit II",
+    "s004": "Hisun Pharmaceuticals",
+    "s005": "Laurus Labs API Unit",
+    "s006": "Sun Pharmaceutical Ind. Ltd",
+    "s007": "Jiangsu Hengrui Medicine",
+    "s008": "Almac Group Ltd",
+    "s009": "Lonza AG Visp Site",
+    "s010": "Boehringer Ingelheim BioXcellence",
+    "s011": "Siegfried AG Hameln",
+    "s012": "Cambrex Corp High Point",
+    "s013": "Dr. Reddy's Laboratories CPS",
+}
+
+_SUPPLIER_DRUG_IMPACT: dict[str, list[str]] = {
+    "s001": ["Vexorin (dp001) – sole KSM source, $2.1B revenue", "Cardivance (dp002) – $1.45B revenue"],
+    "s002": ["Lumizap (dp003) – primary API source, $890M revenue"],
+    "s003": ["Vexorin (dp001) – KSM source, $2.1B revenue", "Renolyx (dp004) – $670M revenue"],
+    "s004": ["Axitrel (dp005) – $540M revenue"],
+    "s005": ["Nevrex (dp006) – sole API source, $420M revenue, zero alternates"],
+    "s006": ["Cardivance (dp002) – $1.45B revenue", "Inflameze (dp007) – $310M revenue"],
+    "s007": ["Lumizap (dp003) – $890M revenue", "Axitrel (dp005) – $540M revenue"],
+    "s008": ["Coatrix DP (dp008) – $280M revenue"],
+    "s009": ["Biorexin (dp009) – sole CMO source, $750M revenue"],
+    "s010": ["Zeltavir (dp010) – $195M revenue"],
+}
+
+_CLASSIFICATION_SEVERITY: dict[str, str] = {
+    "Class I": "critical",
+    "Class II": "high",
+    "Class III": "medium",
+    "Warning Letter": "critical",
+}
+
+
+def _signal_to_alert(row: dict) -> dict | None:
+    """Transform a curated-parquet row into the alert schema expected by the UI."""
+    supplier_id = row.get("supplier_id")
+    if not supplier_id:
+        return None  # skip signals with no supplier match
+
+    source = row.get("source", "")
+    classification = row.get("classification") or ""
+    severity = _CLASSIFICATION_SEVERITY.get(classification, "high")
+
+    firm = (row.get("recalling_firm") or "").strip()
+    product = (row.get("product_description") or "").strip()
+    reason = (row.get("reason_for_recall") or "").strip()
+
+    if source == "fda_warning_letter":
+        subject = product or reason
+        title = f"FDA Warning Letter – {subject[:80]}" if subject else f"FDA Warning Letter – {firm}"
+        description = reason or f"FDA issued a Warning Letter to {firm}."
+        source_label = "FDA Warning Letters"
+        confidence_base = 0.90
+    else:
+        body = (product[:70] if product else reason[:70]) or firm
+        title = f"FDA {classification} Recall – {body}" if classification else f"FDA Enforcement – {body}"
+        parts = [reason] if reason else []
+        if firm:
+            parts.append(f"Recalling firm: {firm}.")
+        if row.get("status"):
+            parts.append(f"Status: {row['status']}.")
+        if row.get("recall_initiation_date"):
+            parts.append(f"Recall initiated: {row['recall_initiation_date']}.")
+        description = " ".join(parts)
+        source_label = "openFDA Enforcement"
+        confidence_base = 0.80
+
+    match_score = float(row.get("match_score") or 0)
+    confidence = round(min(confidence_base, match_score / 100 * confidence_base), 2)
+
+    event_date = row.get("event_date") or row.get("report_date") or ""
+    if hasattr(event_date, "strftime"):
+        date_str = event_date.strftime("%Y-%m-%d")
+    else:
+        date_str = str(event_date)[:10] if event_date else ""
+
+    return {
+        "id": f"{source}_{row.get('signal_id', '')}",
+        "supplierId": supplier_id,
+        "supplierName": _SUPPLIER_NAMES.get(supplier_id, firm),
+        "type": "Regulatory",
+        "severity": severity,
+        "title": title,
+        "description": description,
+        "sourceUrl": row.get("source_url"),
+        "sourceLabel": source_label,
+        "date": date_str,
+        "drugImpact": _SUPPLIER_DRUG_IMPACT.get(supplier_id, []),
+        "confidence": confidence,
+        "reviewedAt": None,
+        "dismissedAt": None,
+        "actionTakenAt": None,
+    }
+
+
 def get_auth_headers():
-    api_key = os.environ.get("API_KEY_OVERRIDE", "")
-    if api_key:
-        return {"X-Domino-Api-Key": api_key}
+    """Fetch a short-lived bearer token from the Domino sidecar.
+
+    This is the recommended pattern inside a Domino workspace or App — the
+    sidecar at localhost:8899 issues a token scoped to the current user
+    session, equivalent to a PAT but without static credential management.
+    Falls back to empty headers (graceful degradation for local dev).
+    """
     try:
         resp = httpx.get("http://localhost:8899/access-token", timeout=2)
         token = resp.text.strip()
@@ -109,8 +216,53 @@ def get_watchlist():
 
 
 @app.get("/api/alerts")
-def get_alerts():
-    return JSONResponse(content=_load_mock("alerts"))
+def get_alerts(since_days: int = 180):
+    """Return real FDA regulatory alerts from the curated signal parquets.
+
+    Reads openFDA enforcement signals and FDA Warning Letters, transforms them
+    to the alert schema the UI expects, and returns them sorted by severity
+    then date.  Returns an empty list (not an error) when the ingest job has
+    not yet produced data — the UI falls back to MOCK_ALERTS in that case.
+    """
+    if pd is None:
+        return {"alerts": [], "count": 0, "source": "pandas_unavailable"}
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=since_days)
+    all_alerts: list[dict] = []
+    sources_used: list[str] = []
+
+    for path, label in [(SIGNALS_MATCHED, "enforcement"), (WL_MATCHED, "warning_letters")]:
+        if not path.exists():
+            continue
+        try:
+            df = pd.read_parquet(path)
+            if df.empty:
+                continue
+            df["event_date"] = pd.to_datetime(df["event_date"], errors="coerce", utc=True)
+            df = df[df["event_date"] >= cutoff]
+            df = df[df["supplier_id"].notna()]
+            for _, row in df.iterrows():
+                alert = _signal_to_alert(row.to_dict())
+                if alert:
+                    all_alerts.append(alert)
+            sources_used.append(label)
+        except Exception as e:
+            print(f"[alerts-read-error] {label}: {e}")
+
+    sev_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    all_alerts.sort(
+        key=lambda a: (
+            sev_order.get(a["severity"], 9),
+            -(int(a["date"].replace("-", "")) if a.get("date") else 0),
+        ),
+    )
+
+    return {
+        "alerts": all_alerts,
+        "count": len(all_alerts),
+        "sources": sources_used,
+        "source": "real_data" if all_alerts else "no_data",
+    }
 
 
 @app.get("/api/tariff-scenarios")

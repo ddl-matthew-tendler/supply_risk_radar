@@ -1886,12 +1886,30 @@ function App() {
     setLoading(true);
     Promise.all([
       fetch('/api/health').then(function(r) { return r.json(); }),
+      fetch('/api/alerts').then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
     ])
-    .then(function() {
+    .then(function(results) {
+      var alertsResp = results[1];
       setConnected(true);
       setUseDummy(false);
-      // Live data would be fetched here; for now fall back to mock
-      loadMockData();
+      // Load mock data as the base for everything not yet on a real feed
+      if (typeof MOCK_SUPPLIERS !== 'undefined') setSuppliers(MOCK_SUPPLIERS);
+      if (typeof MOCK_WATCHLIST !== 'undefined') setWatchlist(MOCK_WATCHLIST);
+      if (typeof MOCK_TARIFF_SCENARIOS !== 'undefined') setTariffScenarios(MOCK_TARIFF_SCENARIOS);
+      if (typeof MOCK_EXEC_BRIEF !== 'undefined') setExecBrief(MOCK_EXEC_BRIEF);
+      // Alerts: use real Regulatory signals from the API, keep mock non-Regulatory types
+      // (Weather, Labor, Tariff, Environmental, Operational) until Phase D lands.
+      var realAlerts = alertsResp && alertsResp.alerts && alertsResp.alerts.length > 0
+        ? alertsResp.alerts : null;
+      if (realAlerts) {
+        var mockNonReg = typeof MOCK_ALERTS !== 'undefined'
+          ? MOCK_ALERTS.filter(function(a) { return a.type !== 'Regulatory'; })
+          : [];
+        setAlerts(realAlerts.concat(mockNonReg));
+      } else {
+        if (typeof MOCK_ALERTS !== 'undefined') setAlerts(MOCK_ALERTS);
+      }
+      setLoading(false);
     })
     .catch(function() {
       setConnected(false);

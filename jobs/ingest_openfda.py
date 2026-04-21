@@ -42,10 +42,22 @@ CURATED_ROOT = VOLUME_ROOT / "signals_curated"
 STATE_ROOT = VOLUME_ROOT / "state"
 
 ENFORCEMENT_URL = "https://api.fda.gov/drug/enforcement.json"
+# Free openFDA API key removes the 1,000 req/day anonymous cap (→ unlimited).
+# Register at https://open.fda.gov/apis/authentication/ then store as the
+# OPENFDA_API_KEY environment variable in Domino.  Falls back to anonymous.
+OPENFDA_API_KEY = os.environ.get("OPENFDA_API_KEY", "")
+
 PAGE_LIMIT = 100
 MAX_PAGES_PER_RUN = 50  # safety cap; 5000 reports per run is plenty
 DEFAULT_LOOKBACK_DAYS = 90  # first-ever run backfills this far
 MATCH_SCORE_THRESHOLD = 85  # rapidfuzz token_set_ratio cutoff
+
+# FDA Warning Letters — pharma-specific page, public, no auth required.
+FDA_WL_URL = (
+    "https://www.fda.gov/drugs/enforcement-activities-fda/"
+    "warning-letters-and-notice-violation-letters-pharmaceutical-companies"
+)
+WL_LOOKBACK_DAYS = 365
 
 
 def _log(msg: str) -> None:
@@ -90,16 +102,37 @@ def fetch_enforcement_reports(since_yyyymmdd: str, run_id: str) -> list[dict]:
     raw_dir = RAW_ROOT / datetime.now(timezone.utc).strftime("%Y/%m/%d")
     raw_dir.mkdir(parents=True, exist_ok=True)
 
+    # Track whether we've already fallen back to anonymous (key invalid/unactivated).
+    _use_key = bool(OPENFDA_API_KEY)
+
     with httpx.Client(timeout=30.0) as client:
         for page in range(MAX_PAGES_PER_RUN):
             skip = page * PAGE_LIMIT
-            params = {"search": search, "limit": PAGE_LIMIT, "skip": skip}
-            _log(f"fetching openFDA enforcement page {page} (skip={skip})")
+            params: dict = {"search": search, "limit": PAGE_LIMIT, "skip": skip}
+            if _use_key:
+                params["api_key"] = OPENFDA_API_KEY
+            _log(f"fetching openFDA enforcement page {page} (skip={skip}, key={'yes' if _use_key else 'anon'})")
             try:
                 resp = client.get(ENFORCEMENT_URL, params=params)
             except Exception as e:
                 _log(f"request failed on page {page}: {e}; aborting this run")
                 break
+
+            # Detect invalid / not-yet-activated API key and fall back to anonymous.
+            if resp.status_code in (400, 401, 403):
+                body = resp.text[:300]
+                if _use_key and "API_KEY_INVALID" in body:
+                    _log("API key invalid or not yet activated — falling back to anonymous access")
+                    _use_key = False
+                    params.pop("api_key", None)
+                    try:
+                        resp = client.get(ENFORCEMENT_URL, params=params)
+                    except Exception as e:
+                        _log(f"anonymous retry failed: {e}; aborting")
+                        break
+                else:
+                    _log(f"HTTP {resp.status_code} on page {page}: {body}")
+                    break
 
             if resp.status_code == 404:
                 _log(f"no more results at page {page} (404)")
@@ -156,6 +189,152 @@ def normalize(results: list[dict]) -> pd.DataFrame:
     if df.empty:
         return df
     df["event_date"] = pd.to_datetime(df["report_date"], format="%Y%m%d", errors="coerce")
+    return df.drop_duplicates(subset=["signal_id"], keep="last")
+
+
+# ── FDA Warning Letters ───────────────────────────────────────────────────────
+def fetch_warning_letters() -> list[dict]:
+    """Scrape FDA Warning Letters for pharmaceutical companies.
+
+    The FDA publishes these at a stable public URL as an HTML page with a
+    table (or year-organised list).  Uses stdlib html.parser — no extra deps.
+    Falls back gracefully if the page structure changes.
+    """
+    from html.parser import HTMLParser
+
+    try:
+        with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+            resp = client.get(FDA_WL_URL, headers={"User-Agent": "SupplyRiskRadar/1.0 (research)"})
+        if resp.status_code != 200:
+            _log(f"WL fetch: HTTP {resp.status_code} — skipping")
+            return []
+    except Exception as e:
+        _log(f"WL fetch error: {e} — skipping")
+        return []
+
+    class _TableParser(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.records: list[list[dict]] = []
+            self._in_table = self._in_row = self._in_cell = False
+            self._text = ""
+            self._link: str | None = None
+            self._row: list[dict] = []
+
+        def handle_starttag(self, tag, attrs):
+            a = dict(attrs)
+            if tag == "table":
+                self._in_table = True
+            elif tag == "tr" and self._in_table:
+                self._in_row, self._row = True, []
+            elif tag in ("td", "th") and self._in_row:
+                self._in_cell, self._text, self._link = True, "", None
+            elif tag == "a" and self._in_cell:
+                href = a.get("href", "")
+                self._link = href if href.startswith("http") else f"https://www.fda.gov{href}"
+
+        def handle_endtag(self, tag):
+            if tag == "table":
+                self._in_table = False
+            elif tag == "tr" and self._in_row:
+                if self._row:
+                    self.records.append(self._row[:])
+                self._in_row = False
+            elif tag in ("td", "th") and self._in_cell:
+                self._row.append({"text": self._text.strip(), "link": self._link})
+                self._in_cell = False
+
+        def handle_data(self, data):
+            if self._in_cell:
+                self._text += data
+
+    parser = _TableParser()
+    try:
+        parser.feed(resp.text)
+    except Exception as e:
+        _log(f"WL HTML parse error: {e} — skipping")
+        return []
+
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=WL_LOOKBACK_DAYS)).date()
+    _HEADER_WORDS = {"company", "firm", "person", "recipient", "issuing", "subject", "date", "letter", "response"}
+    letters: list[dict] = []
+
+    for row in parser.records:
+        if len(row) < 2:
+            continue
+        company_cell = row[0]
+        company = company_cell["text"]
+        if not company or company.lower() in _HEADER_WORDS:
+            continue
+
+        # Find date cell — scan all cells for MM/DD/YYYY or YYYY-MM-DD
+        date_str: str | None = None
+        date_idx: int | None = None
+        for i, cell in enumerate(row):
+            for fmt in ("%m/%d/%Y", "%Y-%m-%d", "%m/%Y"):
+                try:
+                    parsed = datetime.strptime(cell["text"].strip(), fmt).date()
+                    if parsed >= cutoff:
+                        date_str = parsed.isoformat()
+                        date_idx = i
+                    break
+                except ValueError:
+                    continue
+            if date_str:
+                break
+
+        if not date_str:
+            continue
+
+        # Subject is the cell just before the date cell, or cell index 2 as fallback
+        if date_idx is not None and date_idx > 1:
+            subject = row[date_idx - 1]["text"]
+        elif len(row) > 2:
+            subject = row[2]["text"]
+        else:
+            subject = ""
+
+        letters.append({
+            "company": company,
+            "date": date_str,
+            "subject": subject,
+            "url": company_cell.get("link"),
+        })
+
+    _log(f"parsed {len(letters)} Warning Letters within last {WL_LOOKBACK_DAYS} days")
+    return letters
+
+
+def normalize_warning_letters(letters: list[dict]) -> pd.DataFrame:
+    if not letters:
+        return pd.DataFrame()
+    rows = []
+    for wl in letters:
+        company = wl["company"]
+        date = wl["date"]
+        subject = wl.get("subject", "")
+        rows.append({
+            "signal_id": f"wl_{company[:40]}_{date}".replace(" ", "_").replace("/", "_"),
+            "source": "fda_warning_letter",
+            "recalling_firm": company,
+            "city": "",
+            "state": "",
+            "country": "",
+            "classification": "Warning Letter",
+            "status": "Active",
+            "product_description": subject,
+            "reason_for_recall": (
+                f"FDA Warning Letter issued to {company}. Subject: {subject}."
+                if subject else f"FDA Warning Letter issued to {company}."
+            ),
+            "report_date": date.replace("-", ""),
+            "recall_initiation_date": date,
+            "recall_number": None,
+            "source_url": wl.get("url"),
+            "ingested_at": datetime.now(timezone.utc).isoformat(),
+            "event_date": pd.Timestamp(date),
+        })
+    df = pd.DataFrame(rows)
     return df.drop_duplicates(subset=["signal_id"], keep="last")
 
 
@@ -245,29 +424,40 @@ def main() -> int:
     since = read_watermark()
     _log(f"watermark: since={since}")
 
-    results = fetch_enforcement_reports(since, run_id)
-    if not results:
-        _log("no new reports; exiting clean")
-        return 0
-
-    df = normalize(results)
-    _log(f"normalized {len(df)} unique signals")
-
-    upsert_parquet(CURATED_ROOT / "openfda_enforcement.parquet", df)
-
     suppliers = load_suppliers_master()
-    matched, review = match_to_suppliers(df, suppliers)
-    upsert_parquet(CURATED_ROOT / "openfda_matched.parquet", matched)
-    if not review.empty:
-        upsert_parquet(CURATED_ROOT / "review_queue_openfda.parquet", review)
 
-    matched_count = int(matched["supplier_id"].notna().sum())
-    _log(f"matched {matched_count}/{len(matched)} signals to known suppliers")
+    # ── Enforcement / Recalls ─────────────────────────────────────────────────
+    results = fetch_enforcement_reports(since, run_id)
+    if results:
+        df = normalize(results)
+        _log(f"normalized {len(df)} unique enforcement signals")
+        upsert_parquet(CURATED_ROOT / "openfda_enforcement.parquet", df)
+        matched, review = match_to_suppliers(df, suppliers)
+        upsert_parquet(CURATED_ROOT / "openfda_matched.parquet", matched)
+        if not review.empty:
+            upsert_parquet(CURATED_ROOT / "review_queue_openfda.parquet", review)
+        matched_count = int(matched["supplier_id"].notna().sum())
+        _log(f"matched {matched_count}/{len(matched)} enforcement signals to known suppliers")
+        if df["report_date"].notna().any():
+            latest = df["report_date"].dropna().max()
+            write_watermark(str(latest), len(df))
+            _log(f"watermark advanced to {latest}")
+    else:
+        _log("no new enforcement reports this run")
 
-    if df["report_date"].notna().any():
-        latest = df["report_date"].dropna().max()
-        write_watermark(str(latest), len(df))
-        _log(f"watermark advanced to {latest}")
+    # ── Warning Letters ───────────────────────────────────────────────────────
+    wl_letters = fetch_warning_letters()
+    if wl_letters:
+        wl_df = normalize_warning_letters(wl_letters)
+        _log(f"normalized {len(wl_df)} Warning Letters")
+        wl_matched, wl_review = match_to_suppliers(wl_df, suppliers)
+        upsert_parquet(CURATED_ROOT / "fda_warning_letters.parquet", wl_matched)
+        if not wl_review.empty:
+            upsert_parquet(CURATED_ROOT / "review_queue_wl.parquet", wl_review)
+        wl_matched_count = int(wl_matched["supplier_id"].notna().sum())
+        _log(f"matched {wl_matched_count}/{len(wl_matched)} Warning Letters to known suppliers")
+    else:
+        _log("no Warning Letters parsed this run")
 
     _log(f"=== openFDA ingest run {run_id} complete ===")
     return 0
