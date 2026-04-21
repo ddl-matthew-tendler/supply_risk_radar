@@ -5,7 +5,7 @@ pulls reports newer than the last successful run.
 
 Layout on the NetApp volume:
 
-    /mnt/netapp-volumes/Supply_Risk_Radar/
+    /mnt/data/supply_risk_radar/
       signals_raw/openfda/enforcement/YYYY/MM/DD/<run_id>.jsonl   raw API pages
       signals_curated/openfda_enforcement.parquet                  normalized
       signals_curated/openfda_matched.parquet                      joined to suppliers
@@ -35,7 +35,7 @@ from rapidfuzz import process, fuzz
 # ── Configuration ────────────────────────────────────────────────────────────
 VOLUME_ROOT = Path(os.environ.get(
     "SRR_VOLUME_ROOT",
-    "/mnt/netapp-volumes/Supply_Risk_Radar",
+    "/mnt/data/supply_risk_radar",
 ))
 RAW_ROOT = VOLUME_ROOT / "signals_raw" / "openfda" / "enforcement"
 CURATED_ROOT = VOLUME_ROOT / "signals_curated"
@@ -52,12 +52,17 @@ MAX_PAGES_PER_RUN = 50  # safety cap; 5000 reports per run is plenty
 DEFAULT_LOOKBACK_DAYS = 90  # first-ever run backfills this far
 MATCH_SCORE_THRESHOLD = 85  # rapidfuzz token_set_ratio cutoff
 
-# FDA Warning Letters — pharma-specific page, public, no auth required.
+# FDA Warning Letters — CDER-filtered search page, public, no auth required.
+# Structure: cols = [posted_date, issued_date, company(+link), office, subject, ...]
 FDA_WL_URL = (
-    "https://www.fda.gov/drugs/enforcement-activities-fda/"
-    "warning-letters-and-notice-violation-letters-pharmaceutical-companies"
+    "https://www.fda.gov/inspections-compliance-enforcement-and-criminal-investigations/"
+    "compliance-actions-and-activities/warning-letters"
+    "?action_type=Warning+Letter"
+    "&issuing_office=Center+for+Drug+Evaluation+and+Research+%28CDER%29"
+    "&page={page}"
 )
 WL_LOOKBACK_DAYS = 365
+WL_MAX_PAGES = 20  # 10 rows/page → up to 200 recent WLs
 
 
 def _log(msg: str) -> None:
@@ -165,10 +170,15 @@ def fetch_enforcement_reports(since_yyyymmdd: str, run_id: str) -> list[dict]:
 def normalize(results: list[dict]) -> pd.DataFrame:
     rows = []
     for r in results:
+        openfda = r.get("openfda") or {}
+        # manufacturer_name is a list in the embedded openfda object; join if multiple
+        mfr_names: list[str] = openfda.get("manufacturer_name") or []
+        mfr_name = "; ".join(str(m).strip() for m in mfr_names if m)
         rows.append({
             "signal_id": r.get("event_id") or r.get("recall_number") or str(uuid.uuid4()),
             "source": "openfda_enforcement",
             "recalling_firm": (r.get("recalling_firm") or "").strip(),
+            "manufacturer_name": mfr_name,
             "city": (r.get("city") or "").strip(),
             "state": (r.get("state") or "").strip(),
             "country": (r.get("country") or "").strip(),
@@ -194,23 +204,12 @@ def normalize(results: list[dict]) -> pd.DataFrame:
 
 # ── FDA Warning Letters ───────────────────────────────────────────────────────
 def fetch_warning_letters() -> list[dict]:
-    """Scrape FDA Warning Letters for pharmaceutical companies.
+    """Scrape CDER Warning Letters from the FDA compliance search page.
 
-    The FDA publishes these at a stable public URL as an HTML page with a
-    table (or year-organised list).  Uses stdlib html.parser — no extra deps.
-    Falls back gracefully if the page structure changes.
+    Page structure (cols): posted_date | issued_date | company(+link) | office | subject | ...
+    Paginates via ?page=N (10 rows/page).  Uses stdlib html.parser — no extra deps.
     """
     from html.parser import HTMLParser
-
-    try:
-        with httpx.Client(timeout=30.0, follow_redirects=True) as client:
-            resp = client.get(FDA_WL_URL, headers={"User-Agent": "SupplyRiskRadar/1.0 (research)"})
-        if resp.status_code != 200:
-            _log(f"WL fetch: HTTP {resp.status_code} — skipping")
-            return []
-    except Exception as e:
-        _log(f"WL fetch error: {e} — skipping")
-        return []
 
     class _TableParser(HTMLParser):
         def __init__(self):
@@ -231,7 +230,10 @@ def fetch_warning_letters() -> list[dict]:
                 self._in_cell, self._text, self._link = True, "", None
             elif tag == "a" and self._in_cell:
                 href = a.get("href", "")
-                self._link = href if href.startswith("http") else f"https://www.fda.gov{href}"
+                if href and not href.startswith("http"):
+                    href = "https://www.fda.gov" + href
+                if href:
+                    self._link = href
 
         def handle_endtag(self, tag):
             if tag == "table":
@@ -248,60 +250,71 @@ def fetch_warning_letters() -> list[dict]:
             if self._in_cell:
                 self._text += data
 
-    parser = _TableParser()
-    try:
-        parser.feed(resp.text)
-    except Exception as e:
-        _log(f"WL HTML parse error: {e} — skipping")
-        return []
-
     cutoff = (datetime.now(timezone.utc) - timedelta(days=WL_LOOKBACK_DAYS)).date()
-    _HEADER_WORDS = {"company", "firm", "person", "recipient", "issuing", "subject", "date", "letter", "response"}
     letters: list[dict] = []
 
-    for row in parser.records:
-        if len(row) < 2:
-            continue
-        company_cell = row[0]
-        company = company_cell["text"]
-        if not company or company.lower() in _HEADER_WORDS:
-            continue
-
-        # Find date cell — scan all cells for MM/DD/YYYY or YYYY-MM-DD
-        date_str: str | None = None
-        date_idx: int | None = None
-        for i, cell in enumerate(row):
-            for fmt in ("%m/%d/%Y", "%Y-%m-%d", "%m/%Y"):
-                try:
-                    parsed = datetime.strptime(cell["text"].strip(), fmt).date()
-                    if parsed >= cutoff:
-                        date_str = parsed.isoformat()
-                        date_idx = i
-                    break
-                except ValueError:
-                    continue
-            if date_str:
+    with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+        for page in range(WL_MAX_PAGES):
+            url = FDA_WL_URL.format(page=page)
+            try:
+                resp = client.get(url)
+            except Exception as e:
+                _log(f"WL fetch page {page} error: {e} — stopping")
+                break
+            if resp.status_code != 200:
+                _log(f"WL fetch page {page}: HTTP {resp.status_code} — stopping")
                 break
 
-        if not date_str:
-            continue
+            parser = _TableParser()
+            try:
+                parser.feed(resp.text)
+            except Exception as e:
+                _log(f"WL HTML parse error page {page}: {e}")
+                break
 
-        # Subject is the cell just before the date cell, or cell index 2 as fallback
-        if date_idx is not None and date_idx > 1:
-            subject = row[date_idx - 1]["text"]
-        elif len(row) > 2:
-            subject = row[2]["text"]
-        else:
-            subject = ""
+            # Filter out header rows (cells where text looks like a column label)
+            _SKIP = {"posted date", "issue date", "subject", "issuing office", "company / individual"}
+            new_this_page = 0
+            stopped_early = False
+            for row in parser.records:
+                if len(row) < 3:
+                    continue
+                # col[0]=posted, col[1]=issued, col[2]=company+link, col[3]=office, col[4]=subject
+                issued_text = row[1]["text"].strip()
+                company_cell = row[2]
+                company = company_cell["text"].strip()
+                subject = row[4]["text"].strip() if len(row) > 4 else ""
 
-        letters.append({
-            "company": company,
-            "date": date_str,
-            "subject": subject,
-            "url": company_cell.get("link"),
-        })
+                if not company or company.lower() in _SKIP:
+                    continue
 
-    _log(f"parsed {len(letters)} Warning Letters within last {WL_LOOKBACK_DAYS} days")
+                issued_date = None
+                for fmt in ("%m/%d/%Y", "%Y-%m-%d"):
+                    try:
+                        issued_date = datetime.strptime(issued_text, fmt).date()
+                        break
+                    except ValueError:
+                        continue
+                if issued_date is None:
+                    continue
+                if issued_date < cutoff:
+                    stopped_early = True
+                    break
+
+                letters.append({
+                    "company": company,
+                    "date": issued_date.isoformat(),
+                    "subject": subject,
+                    "url": company_cell.get("link"),
+                })
+                new_this_page += 1
+
+            _log(f"WL page {page}: {new_this_page} letters")
+            if new_this_page == 0 or stopped_early:
+                break
+            time.sleep(0.5)  # be polite to fda.gov
+
+    _log(f"parsed {len(letters)} CDER Warning Letters within last {WL_LOOKBACK_DAYS} days")
     return letters
 
 
@@ -388,13 +401,32 @@ def load_suppliers_master() -> pd.DataFrame:
     return df
 
 
+def _norm(s: str) -> str:
+    """Lowercase and strip punctuation so token_set_ratio splits cleanly."""
+    import re
+    return re.sub(r"[^\w\s]", " ", s.lower())
+
+
 def match_to_suppliers(signals: pd.DataFrame, suppliers: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     if signals.empty or suppliers.empty:
         return signals.assign(supplier_id=None, match_score=0.0), pd.DataFrame()
 
-    # Normalise to lowercase — rapidfuzz v3 is case-sensitive by default.
-    candidates = (suppliers["name"] + " | " + suppliers["city"] + " | " + suppliers["country"]).str.lower().tolist()
-    id_lookup = suppliers["supplier_id"].tolist()
+    # Build candidate list from canonical name + any FDA aliases (US subsidiary names, etc.)
+    # Normalise to lowercase + strip punctuation — rapidfuzz v3 splits on whitespace only,
+    # so "industries," != "industries" unless punctuation is removed first.
+    cand_names: list[str] = []
+    id_lookup: list[str] = []
+    for _, sup_row in suppliers.iterrows():
+        base = _norm(f"{sup_row['name']} {sup_row.get('city','')} {sup_row.get('country','')}")
+        cand_names.append(base)
+        id_lookup.append(sup_row["supplier_id"])
+        # Expand aliases (pipe-separated in fda_aliases column)
+        for alias in str(sup_row.get("fda_aliases", "") or "").split("|"):
+            alias = alias.strip()
+            if alias:
+                cand_names.append(_norm(alias))
+                id_lookup.append(sup_row["supplier_id"])
+    candidates = cand_names
 
     supplier_ids: list[str | None] = []
     scores: list[float] = []
@@ -402,18 +434,30 @@ def match_to_suppliers(signals: pd.DataFrame, suppliers: pd.DataFrame) -> tuple[
         firm = str(row["recalling_firm"] or "").strip()
         city = str(row["city"] or "").strip()
         country = str(row["country"] or "").strip()
-        if not firm:
+        mfr = str(row.get("manufacturer_name") or "").strip()
+        if not firm and not mfr:
             supplier_ids.append(None)
             scores.append(0.0)
             continue
-        query = f"{firm} | {city} | {country}".lower()
-        match = process.extractOne(query, candidates, scorer=fuzz.token_set_ratio)
-        if match and match[1] >= MATCH_SCORE_THRESHOLD:
-            supplier_ids.append(id_lookup[match[2]])
-            scores.append(float(match[1]))
-        else:
-            supplier_ids.append(None)
-            scores.append(float(match[1]) if match else 0.0)
+
+        # Try recalling_firm first; fall back to openfda.manufacturer_name.
+        # This catches distributor-initiated recalls (e.g. McKesson recalls a drug
+        # manufactured by one of our suppliers) — the manufacturer name is embedded
+        # in the openfda sub-object even when the recalling firm is a distributor.
+        best_sid: str | None = None
+        best_score: float = 0.0
+        for query_str in filter(None, [
+            _norm(f"{firm} {city} {country}") if firm else None,
+            _norm(mfr) if mfr else None,
+        ]):
+            match = process.extractOne(query_str, candidates, scorer=fuzz.token_set_ratio)
+            if match and float(match[1]) > best_score:
+                best_score = float(match[1])
+                if match[1] >= MATCH_SCORE_THRESHOLD:
+                    best_sid = id_lookup[match[2]]
+
+        supplier_ids.append(best_sid)
+        scores.append(best_score)
 
     out = signals.copy()
     out["supplier_id"] = supplier_ids

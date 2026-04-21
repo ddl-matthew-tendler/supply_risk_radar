@@ -1887,25 +1887,59 @@ function App() {
     Promise.all([
       fetch('/api/health').then(function(r) { return r.json(); }),
       fetch('/api/alerts').then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
+      fetch('/api/suppliers').then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
+      fetch('/api/watchlist').then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
+      fetch('/api/exec-brief').then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
     ])
     .then(function(results) {
-      var alertsResp = results[1];
+      var alertsResp   = results[1];
+      var suppliersResp = results[2];
+      var watchlistResp = results[3];
+      var execBriefResp = results[4];
       setConnected(true);
       setUseDummy(false);
-      // Load mock data as the base for everything not yet on a real feed
-      if (typeof MOCK_SUPPLIERS !== 'undefined') setSuppliers(MOCK_SUPPLIERS);
-      if (typeof MOCK_WATCHLIST !== 'undefined') setWatchlist(MOCK_WATCHLIST);
+
+      // Suppliers: use real data if available, fall back to mock
+      if (suppliersResp && suppliersResp.source === 'real_data' && suppliersResp.suppliers && suppliersResp.suppliers.length > 0) {
+        setSuppliers(suppliersResp.suppliers);
+      } else if (typeof MOCK_SUPPLIERS !== 'undefined') {
+        setSuppliers(MOCK_SUPPLIERS);
+      }
+
+      // Watchlist: use real data if available, fall back to mock
+      if (watchlistResp && watchlistResp.source === 'real_data' && watchlistResp.watchlist && watchlistResp.watchlist.length > 0) {
+        setWatchlist(watchlistResp.watchlist);
+      } else if (typeof MOCK_WATCHLIST !== 'undefined') {
+        setWatchlist(MOCK_WATCHLIST);
+      }
+
+      // Exec brief: use real data if available, fall back to mock
+      if (execBriefResp && execBriefResp.source === 'real_data') {
+        setExecBrief(execBriefResp);
+      } else if (typeof MOCK_EXEC_BRIEF !== 'undefined') {
+        setExecBrief(MOCK_EXEC_BRIEF);
+      }
+
+      // Tariff scenarios: still mock until Phase D
       if (typeof MOCK_TARIFF_SCENARIOS !== 'undefined') setTariffScenarios(MOCK_TARIFF_SCENARIOS);
-      if (typeof MOCK_EXEC_BRIEF !== 'undefined') setExecBrief(MOCK_EXEC_BRIEF);
+
       // Alerts: use real Regulatory signals from the API, keep mock non-Regulatory types
       // (Weather, Labor, Tariff, Environmental, Operational) until Phase D lands.
       var realAlerts = alertsResp && alertsResp.alerts && alertsResp.alerts.length > 0
         ? alertsResp.alerts : null;
       if (realAlerts) {
-        var mockNonReg = typeof MOCK_ALERTS !== 'undefined'
-          ? MOCK_ALERTS.filter(function(a) { return a.type !== 'Regulatory'; })
-          : [];
-        setAlerts(realAlerts.concat(mockNonReg));
+        // Check if real geo signals (Weather, Environmental, Tariff) are present.
+        // If yes, use only real alerts. If not, pad with mock non-Regulatory types
+        // (Labor, Geopolitical) until Phase E lands those feeds.
+        var realNonReg = realAlerts.filter(function(a) { return a.type !== 'Regulatory'; });
+        if (realNonReg.length > 0) {
+          setAlerts(realAlerts);
+        } else {
+          var mockNonReg = typeof MOCK_ALERTS !== 'undefined'
+            ? MOCK_ALERTS.filter(function(a) { return a.type !== 'Regulatory'; })
+            : [];
+          setAlerts(realAlerts.concat(mockNonReg));
+        }
       } else {
         if (typeof MOCK_ALERTS !== 'undefined') setAlerts(MOCK_ALERTS);
       }

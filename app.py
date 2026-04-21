@@ -23,10 +23,11 @@ except Exception:
 
 SRR_VOLUME_ROOT = Path(os.environ.get(
     "SRR_VOLUME_ROOT",
-    "/mnt/netapp-volumes/Supply_Risk_Radar",
+    "/mnt/data/supply_risk_radar",
 ))
-SIGNALS_MATCHED = SRR_VOLUME_ROOT / "signals_curated" / "openfda_matched.parquet"
-WL_MATCHED     = SRR_VOLUME_ROOT / "signals_curated" / "fda_warning_letters.parquet"
+SIGNALS_MATCHED   = SRR_VOLUME_ROOT / "signals_curated" / "openfda_matched.parquet"
+WL_MATCHED        = SRR_VOLUME_ROOT / "signals_curated" / "fda_warning_letters.parquet"
+GEO_SIGNALS       = SRR_VOLUME_ROOT / "signals_curated" / "geo_signals.parquet"
 OPENFDA_WATERMARK = SRR_VOLUME_ROOT / "state" / "openfda_watermark.json"
 
 app = FastAPI()
@@ -128,6 +129,253 @@ def _load_supplier_lookup() -> tuple[dict[str, str], dict[str, list[str]]]:
 
 _SUPPLIER_NAMES, _SUPPLIER_DRUG_IMPACT = _load_supplier_lookup()
 
+# ── Risk score delta from recent FDA signals ──────────────────────────────────
+_SIGNAL_RISK_BUMP: dict[str, int] = {
+    "Class I": 15, "Class II": 10, "Class III": 5, "Warning Letter": 15,
+}
+
+
+def _build_real_suppliers() -> list[dict] | None:
+    """Return the supplier list with dynamically recalculated risk scores.
+
+    Risk score = base score from CSV + cumulative bumps from matched FDA signals
+    in the last 90 days, capped at 100.  Active FDA events populate activeEvents.
+    Falls back to None if pandas or data is unavailable.
+    """
+    if pd is None:
+        return None
+
+    sup_parquet = SRR_VOLUME_ROOT / "signals_curated" / "suppliers_master.parquet"
+    sup_csv = Path(__file__).parent / "data" / "suppliers_master.csv"
+    sup_df = None
+    if sup_parquet.exists():
+        try:
+            sup_df = pd.read_parquet(sup_parquet)
+        except Exception:
+            pass
+    if sup_df is None and sup_csv.exists():
+        try:
+            sup_df = pd.read_csv(sup_csv, dtype=str).fillna("")
+        except Exception:
+            pass
+    if sup_df is None or sup_df.empty:
+        return None
+
+    dp_csv = Path(__file__).parent / "data" / "drug_products.csv"
+    dp_df = None
+    if dp_csv.exists():
+        try:
+            dp_df = pd.read_csv(dp_csv, dtype=str).fillna("")
+        except Exception:
+            pass
+
+    # Build supplier → drug product IDs map
+    sup_to_drugs: dict[str, list[str]] = {}
+    if dp_df is not None:
+        for _, drow in dp_df.iterrows():
+            all_ids = [s.strip() for s in str(drow.get("all_supplier_ids", "")).split("|") if s.strip()]
+            for sid in all_ids:
+                sup_to_drugs.setdefault(sid, []).append(drow["drug_id"])
+
+    # Aggregate FDA signals per supplier (last 90 days)
+    cutoff90 = datetime.now(timezone.utc) - timedelta(days=90)
+    sig_bumps: dict[str, int] = {}
+    sig_events: dict[str, list[str]] = {}
+    for path in (SIGNALS_MATCHED, WL_MATCHED, GEO_SIGNALS):
+        if not path.exists():
+            continue
+        try:
+            sdf = pd.read_parquet(path)
+            if sdf.empty:
+                continue
+            sdf["event_date"] = pd.to_datetime(sdf["event_date"], errors="coerce", utc=True)
+            sdf = sdf[sdf["supplier_id"].notna() & (sdf["event_date"] >= cutoff90)]
+            for _, srow in sdf.iterrows():
+                sid = srow["supplier_id"]
+                cls = str(srow.get("classification") or "")
+                bump = _SIGNAL_RISK_BUMP.get(cls, 5)
+                sig_bumps[sid] = sig_bumps.get(sid, 0) + bump
+                # Build short active-event string
+                product = str(srow.get("product_description") or "")[:60]
+                date_raw = srow.get("event_date")
+                date_s = date_raw.strftime("%b %Y") if hasattr(date_raw, "strftime") else ""
+                if cls == "Warning Letter":
+                    label = f"FDA Warning Letter – {product or srow.get('recalling_firm', '')}"
+                else:
+                    label = f"FDA {cls} Recall – {product}"
+                if date_s:
+                    label += f" ({date_s})"
+                sig_events.setdefault(sid, []).append(label[:120])
+        except Exception as e:
+            print(f"[build-suppliers] signal read error: {e}")
+
+    def _risk_level(score: int) -> str:
+        if score >= 75:
+            return "critical"
+        if score >= 60:
+            return "high"
+        if score >= 40:
+            return "medium"
+        return "low"
+
+    suppliers_out = []
+    for _, row in sup_df.iterrows():
+        sid = str(row["supplier_id"])
+        base_score = int(float(row.get("risk_score") or 50))
+        bump = sig_bumps.get(sid, 0)
+        risk_score = min(100, base_score + bump)
+        risk_level = _risk_level(risk_score)
+
+        try:
+            sole_val = str(row.get("sole", "false")).lower()
+            sole = sole_val in ("true", "1", "yes")
+        except Exception:
+            sole = False
+
+        suppliers_out.append({
+            "id": sid,
+            "name": str(row.get("name", "")),
+            "shortName": str(row.get("short_name", "")),
+            "country": str(row.get("country", "")),
+            "city": str(row.get("city", "")),
+            "lat": float(row.get("lat") or 0),
+            "lng": float(row.get("lng") or 0),
+            "riskScore": risk_score,
+            "riskLevel": risk_level,
+            "category": str(row.get("category", "")),
+            "sole": sole,
+            "drugProducts": sup_to_drugs.get(sid, []),
+            "spend": int(float(row.get("spend") or 0)),
+            "activeEvents": sig_events.get(sid, []),
+            "alternateStatus": str(row.get("alternate_status", "None")),
+            "leadTimeDays": int(float(row.get("lead_time_days") or 0)),
+            "fda483Date": None,
+            "hsCode": str(row.get("hs_code", "")) or None,
+            "tariffExposure": float(row.get("tariff_exposure") or 0),
+        })
+
+    # Sort by riskScore descending
+    suppliers_out.sort(key=lambda s: -s["riskScore"])
+    return suppliers_out
+
+
+def _build_real_watchlist(suppliers: list[dict]) -> list[dict]:
+    """Derive watchlist from sole-source or critical/high suppliers with drug linkage."""
+    dp_csv = Path(__file__).parent / "data" / "drug_products.csv"
+    dp_map: dict[str, dict] = {}
+    sole_drug_map: dict[str, str] = {}  # supplier_id → sole drug name
+    if dp_csv.exists() and pd is not None:
+        try:
+            dp_df = pd.read_csv(dp_csv, dtype=str).fillna("")
+            for _, row in dp_df.iterrows():
+                dp_map[row["drug_id"]] = row.to_dict()
+                sole_ids = [s.strip() for s in str(row.get("sole_supplier_ids", "")).split("|") if s.strip()]
+                for sid in sole_ids:
+                    sole_drug_map[sid] = row["drug_id"]
+        except Exception:
+            pass
+
+    watchlist = []
+    rank = 0
+    for sup in suppliers:
+        sid = sup["id"]
+        # Include sole-source suppliers or those with critical/high risk
+        if not sup["sole"] and sup["riskLevel"] not in ("critical", "high"):
+            continue
+        # Find highest-revenue drug product this supplier is linked to
+        best_drug: dict | None = None
+        best_rev = 0
+        for dpid in sup.get("drugProducts", []):
+            dp = dp_map.get(dpid)
+            if dp:
+                rev = int(float(dp.get("revenue") or 0))
+                if rev > best_rev:
+                    best_rev = rev
+                    best_drug = dp
+        if best_drug is None and not sup.get("drugProducts"):
+            continue
+        rank += 1
+        drug_name = best_drug["name"] if best_drug else "Unknown"
+        revenue = int(float(best_drug.get("revenue") or 0)) if best_drug else 0
+        sole_flag = sid in sole_drug_map
+        watchlist.append({
+            "rank": rank,
+            "supplierId": sid,
+            "supplierName": sup["name"],
+            "country": sup["country"],
+            "drugProductId": best_drug["drug_id"] if best_drug else None,
+            "drugProductName": drug_name,
+            "revenue": revenue,
+            "riskScore": sup["riskScore"],
+            "riskDrivers": sup["activeEvents"][:3] or (["Sole-source supplier"] if sole_flag else ["High risk score"]),
+            "alternateStatus": sup["alternateStatus"],
+            "leadTimeDays": sup.get("leadTimeDays", 0),
+            "revenueAtRisk": revenue if sole_flag else int(revenue * sup["riskScore"] / 100),
+            "mitigationSuggestion": (
+                f"Review CAPA status with {sup['shortName']}. "
+                f"Alternate qualification status: {sup['alternateStatus']}. "
+                f"Lead time: {sup.get('leadTimeDays', 'N/A')} days."
+            ),
+        })
+        if rank >= 10:
+            break
+    return watchlist
+
+
+def _build_real_exec_brief(suppliers: list[dict], alerts: list[dict]) -> dict:
+    """Generate an exec brief summary from real supplier + alert data."""
+    now = datetime.now(timezone.utc)
+    critical = [s for s in suppliers if s["riskLevel"] == "critical"]
+    high = [s for s in suppliers if s["riskLevel"] == "high"]
+    sole_critical = [s for s in critical if s["sole"]]
+
+    dp_csv = Path(__file__).parent / "data" / "drug_products.csv"
+    total_revenue_at_risk = 0
+    if dp_csv.exists() and pd is not None:
+        try:
+            dp_df = pd.read_csv(dp_csv, dtype=str).fillna("")
+            sole_sids = {s["id"] for s in sole_critical}
+            for _, row in dp_df.iterrows():
+                sole_ids = {s.strip() for s in str(row.get("sole_supplier_ids", "")).split("|") if s.strip()}
+                if sole_ids & sole_sids:
+                    total_revenue_at_risk += int(float(row.get("revenue") or 0))
+        except Exception:
+            pass
+
+    recent_recalls = [a for a in alerts if a.get("type") == "Regulatory" and "Recall" in a.get("title", "")]
+    top5 = []
+    for i, sup in enumerate(suppliers[:5]):
+        events = sup.get("activeEvents", [])
+        top_event = events[0] if events else f"Risk score {sup['riskScore']}"
+        drug_ids = sup.get("drugProducts", [])
+        top5.append({
+            "rank": i + 1,
+            "headline": f"{sup['shortName']} ({sup['country']}) – {top_event[:80]}",
+            "impact": f"{len(drug_ids)} drug product(s) affected, {'sole-source' if sup['sole'] else 'multi-source'}",
+            "urgency": "Act within 48h" if sup["riskLevel"] == "critical" else "Monitor weekly",
+        })
+
+    summary = (
+        f"Supply Risk Radar as of {now.strftime('%B %d, %Y')}: "
+        f"{len(critical)} critical-risk suppliers ({len(sole_critical)} sole-source), "
+        f"{len(high)} high-risk suppliers. "
+        f"{len(recent_recalls)} active FDA recall signal(s) in the last 90 days. "
+        f"Estimated revenue at risk from sole-source critical suppliers: "
+        f"${total_revenue_at_risk / 1e6:.0f}M."
+    )
+
+    return {
+        "generatedAt": now.isoformat(),
+        "weekEnding": now.strftime("%Y-%m-%d"),
+        "weekSummary": summary,
+        "top5Risks": top5,
+        "criticalCount": len(critical),
+        "highCount": len(high),
+        "revenueAtRisk": total_revenue_at_risk,
+        "recentRecallCount": len(recent_recalls),
+        "source": "real_data",
+    }
+
 
 def _signal_to_alert(row: dict) -> dict | None:
     """Transform a curated-parquet row into the alert schema expected by the UI."""
@@ -191,6 +439,50 @@ def _signal_to_alert(row: dict) -> dict | None:
     }
 
 
+def _geo_signal_to_alert(row: dict) -> dict | None:
+    """Transform a geo_signals parquet row into the UI alert schema."""
+    supplier_id = row.get("supplier_id")
+    if not supplier_id:
+        return None
+
+    signal_type = str(row.get("signal_type") or "Environmental")
+    severity    = str(row.get("severity") or "medium")
+    title       = str(row.get("title") or "")
+    description = str(row.get("description") or "")
+    source      = str(row.get("source") or "")
+
+    source_labels = {
+        "usgs_earthquake":  "USGS Earthquake Hazards",
+        "openmeteo_weather": "OpenMeteo Forecast",
+        "fx_rate":          "FX Rate Monitor",
+    }
+    source_label = source_labels.get(source, source)
+
+    event_date = row.get("event_date") or ""
+    if hasattr(event_date, "strftime"):
+        date_str = event_date.strftime("%Y-%m-%d")
+    else:
+        date_str = str(event_date)[:10] if event_date else ""
+
+    return {
+        "id": f"{source}_{row.get('signal_id', '')}",
+        "supplierId": supplier_id,
+        "supplierName": _SUPPLIER_NAMES.get(supplier_id, str(row.get("recalling_firm", ""))),
+        "type": signal_type,
+        "severity": severity,
+        "title": title,
+        "description": description,
+        "sourceUrl": row.get("source_url"),
+        "sourceLabel": source_label,
+        "date": date_str,
+        "drugImpact": _SUPPLIER_DRUG_IMPACT.get(supplier_id, []),
+        "confidence": 0.95,
+        "reviewedAt": None,
+        "dismissedAt": None,
+        "actionTakenAt": None,
+    }
+
+
 def get_auth_headers():
     """Fetch a short-lived bearer token from the Domino sidecar.
 
@@ -228,12 +520,19 @@ def get_user():
 
 @app.get("/api/suppliers")
 def get_suppliers():
-    return JSONResponse(content=_load_mock("suppliers"))
+    suppliers = _build_real_suppliers()
+    if suppliers is None:
+        return JSONResponse(content={"suppliers": [], "source": "no_data"})
+    return JSONResponse(content={"suppliers": suppliers, "source": "real_data", "count": len(suppliers)})
 
 
 @app.get("/api/watchlist")
 def get_watchlist():
-    return JSONResponse(content=_load_mock("watchlist"))
+    suppliers = _build_real_suppliers()
+    if suppliers is None:
+        return JSONResponse(content={"watchlist": [], "source": "no_data"})
+    watchlist = _build_real_watchlist(suppliers)
+    return JSONResponse(content={"watchlist": watchlist, "source": "real_data"})
 
 
 @app.get("/api/alerts")
@@ -252,6 +551,7 @@ def get_alerts(since_days: int = 180):
     all_alerts: list[dict] = []
     sources_used: list[str] = []
 
+    # FDA regulatory signals
     for path, label in [(SIGNALS_MATCHED, "enforcement"), (WL_MATCHED, "warning_letters")]:
         if not path.exists():
             continue
@@ -269,6 +569,23 @@ def get_alerts(since_days: int = 180):
             sources_used.append(label)
         except Exception as e:
             print(f"[alerts-read-error] {label}: {e}")
+
+    # Geo / macro signals (earthquakes, weather, FX)
+    if GEO_SIGNALS.exists():
+        try:
+            gdf = pd.read_parquet(GEO_SIGNALS)
+            if not gdf.empty:
+                gdf["event_date"] = pd.to_datetime(gdf["event_date"], errors="coerce", utc=True)
+                gdf = gdf[gdf["event_date"] >= cutoff]
+                gdf = gdf[gdf["supplier_id"].notna()]
+                for _, row in gdf.iterrows():
+                    alert = _geo_signal_to_alert(row.to_dict())
+                    if alert:
+                        all_alerts.append(alert)
+                geo_types = gdf["source"].unique().tolist() if "source" in gdf.columns else []
+                sources_used.extend(geo_types)
+        except Exception as e:
+            print(f"[alerts-read-error] geo_signals: {e}")
 
     sev_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
     all_alerts.sort(
@@ -293,7 +610,16 @@ def get_tariff_scenarios():
 
 @app.get("/api/exec-brief")
 def get_exec_brief():
-    return JSONResponse(content=_load_mock("exec_brief"))
+    suppliers = _build_real_suppliers()
+    if suppliers is None:
+        return JSONResponse(content={"source": "no_data"})
+    try:
+        _ar = get_alerts(since_days=90)
+        alerts_data = _ar["alerts"] if isinstance(_ar, dict) else []
+    except Exception:
+        alerts_data = []
+    brief = _build_real_exec_brief(suppliers, alerts_data)
+    return JSONResponse(content=brief)
 
 
 # ── P3A: Governed audit Dataset (JSONL stand-in) ─────────────────────────────
@@ -541,15 +867,37 @@ def _run_ingest_once() -> dict:
     return dict(_ingest_state)
 
 
+def _run_geo_ingest_once() -> None:
+    try:
+        from jobs import ingest_geo_signals
+        ingest_geo_signals.main()
+    except Exception as e:
+        print(f"[geo-ingest-error] {e}")
+
+
 def _ingest_scheduler() -> None:
-    """Run ingest on boot, then every 24h. Survives failures."""
+    """Run all ingest jobs on boot, then on staggered schedules. Survives failures.
+
+    FDA enforcement + WL: every 24h (data updates ~daily)
+    Geo signals (USGS, weather, FX): every 6h (weather/FX refresh frequently)
+    """
     time.sleep(15)  # let the app finish booting
+    geo_interval  = 6  * 60 * 60   # 6 hours
+    fda_interval  = 24 * 60 * 60   # 24 hours
+    last_geo = 0.0
+    last_fda = 0.0
     while True:
-        try:
-            _run_ingest_once()
-        except Exception as e:
-            print(f"[scheduler-error] {e}")
-        time.sleep(24 * 60 * 60)
+        now = time.time()
+        if now - last_fda >= fda_interval:
+            try:
+                _run_ingest_once()
+            except Exception as e:
+                print(f"[fda-scheduler-error] {e}")
+            last_fda = time.time()
+        if now - last_geo >= geo_interval:
+            _run_geo_ingest_once()
+            last_geo = time.time()
+        time.sleep(60)  # check every minute
 
 
 @app.on_event("startup")
@@ -557,9 +905,9 @@ def _start_scheduler():
     if os.environ.get("SRR_DISABLE_INGEST") == "1":
         print("[ingest] disabled via SRR_DISABLE_INGEST=1")
         return
-    t = threading.Thread(target=_ingest_scheduler, daemon=True, name="openfda-ingest")
+    t = threading.Thread(target=_ingest_scheduler, daemon=True, name="ingest-scheduler")
     t.start()
-    print("[ingest] background scheduler started")
+    print("[ingest] background scheduler started (FDA: 24h, geo: 6h)")
 
 
 @app.post("/api/signals/openfda/ingest")

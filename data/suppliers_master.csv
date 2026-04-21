@@ -1,26 +1,26 @@
-supplier_id,name,short_name,country,city,lat,lng,category,sole,spend,hs_code,tariff_exposure,alternate_status,lead_time_days,risk_score,risk_level
-s001,Sun Pharmaceutical Industries Ltd,Sun Pharma,India,Halol,22.50,73.47,API,true,48000000,2934.99,0.10,None,21,78,high
-s002,Cipla Ltd Patalganga,Cipla Patalganga,India,Patalganga,18.93,73.13,API,false,31000000,2934.99,0.10,Qualified,18,52,medium
-s003,Natco Pharma Ltd,Natco Pharma,India,Hyderabad,17.41,78.52,API,true,27000000,2934.10,0.10,None,24,81,critical
-s004,Fresenius Kabi Oncology Ltd,Fresenius Kabi,India,Nalagarh,31.04,76.71,API,true,19000000,2941.90,0.10,None,28,84,critical
-s005,Granules India Ltd,Granules India,India,Hyderabad,17.38,78.49,API,false,22000000,2922.49,0.10,Qualified,19,47,medium
-s006,Aurobindo Pharma Ltd,Aurobindo,India,Hyderabad,17.39,78.49,API,false,37000000,2934.99,0.10,In Qualification,21,63,high
-s007,Dr. Reddy's Laboratories Ltd,Dr. Reddy's,India,Hyderabad,17.36,78.51,API,false,28000000,2934.99,0.10,Qualified,20,44,medium
-s008,Divi's Laboratories Ltd,Divi's Labs,India,Hyderabad,17.40,78.50,KSM,true,24000000,2934.10,0.10,None,26,76,high
-s009,Zhejiang Huahai Pharmaceutical Co.,Zhejiang Huahai,China,Linhai,28.85,121.13,API,false,41000000,2933.59,0.25,In Qualification,32,72,high
-s010,CSPC Pharmaceutical Group Ltd,CSPC Pharma,China,Shijiazhuang,38.04,114.51,API,false,33000000,2922.49,0.25,Qualified,30,58,high
-s011,Hisun Pharmaceuticals Co. Ltd,Hisun Pharma,China,Taizhou,28.66,121.42,API,false,18000000,2941.10,0.25,Qualified,28,49,medium
-s012,WuXi Biologics Co. Ltd,WuXi Biologics,China,Wuxi,31.49,120.31,CMO,false,54000000,3002.15,0.25,Qualified,45,55,high
-s013,Jiangsu Hengrui Medicine Co. Ltd,Hengrui Medicine,China,Lianyungang,34.60,119.16,KSM,false,16000000,2933.99,0.25,In Qualification,33,43,medium
-s014,Lonza AG Visp,Lonza Visp,Switzerland,Visp,46.29,7.88,CMO,true,67000000,3002.13,0.03,None,42,71,high
-s015,Lonza AG Basel,Lonza Basel,Switzerland,Basel,47.56,7.59,CMO,false,28000000,3002.13,0.03,Qualified,38,38,low
-s016,Siegfried AG Hameln,Siegfried Hameln,Germany,Hameln,52.10,9.36,CMO,false,22000000,2934.99,0.02,In Qualification,35,41,medium
-s017,Almac Group Ltd Craigavon,Almac Group,United Kingdom,Craigavon,54.44,-6.38,CMO,false,31000000,3004.90,0.05,Qualified,35,46,medium
-s018,Thermo Fisher Scientific Patheon,Patheon Durham,United States,Durham,35.99,-78.90,CMO,false,44000000,3004.90,0.00,Qualified,28,29,low
-s019,Cambrex Corp High Point,Cambrex HP,United States,High Point,35.96,-80.01,API,false,19000000,2934.99,0.00,Qualified,21,31,low
-s020,BASF SE Ludwigshafen,BASF,Germany,Ludwigshafen,49.49,8.44,Excipient,false,11000000,3824.99,0.03,Qualified,25,22,low
-s021,Evonik Industries AG,Evonik,Germany,Essen,51.46,7.01,Excipient,false,8000000,3914.00,0.02,Qualified,22,18,low
-s022,Colorcon Ltd,Colorcon,United Kingdom,Dartford,51.45,0.22,Excipient,false,6000000,3912.11,0.05,Qualified,20,15,low
-s023,West Pharmaceutical Services,West Pharma,United States,Exton,40.04,-75.62,Packaging,false,9000000,3923.50,0.00,Qualified,18,12,low
-s024,Pfizer CentreOne Kalamazoo,Pfizer C1,United States,Kalamazoo,42.29,-85.59,API,false,14000000,2941.10,0.00,Qualified,19,17,low
-s025,Wockhardt Ltd Mumbai,Wockhardt,India,Mumbai,19.08,72.88,API,false,12000000,2935.90,0.10,Qualified,23,36,low
+supplier_id,name,short_name,country,city,lat,lng,category,sole,spend,hs_code,tariff_exposure,alternate_status,lead_time_days,risk_score,risk_level,fda_aliases
+s001,Sun Pharmaceutical Industries Ltd,Sun Pharma,India,Halol,22.50,73.47,API,true,48000000,2934.99,0.10,None,21,78,high,Sun Pharmaceutical Industries Inc|Sun Pharma Industries Inc|SUN PHARMACEUTICAL INDUSTRIES INC|Sun Pharma
+s002,Cipla Ltd Patalganga,Cipla Patalganga,India,Patalganga,18.93,73.13,API,false,31000000,2934.99,0.10,Qualified,18,52,medium,Cipla USA Inc|Cipla Ltd|CIPLA LIMITED
+s003,Natco Pharma Ltd,Natco Pharma,India,Hyderabad,17.41,78.52,API,true,27000000,2934.10,0.10,None,24,81,critical,NATCO Pharma Limited|Natco Pharma Limited|NATCO PHARMA LIMITED
+s004,Fresenius Kabi Oncology Ltd,Fresenius Kabi,India,Nalagarh,31.04,76.71,API,true,19000000,2941.90,0.10,None,28,84,critical,Fresenius Kabi Oncology Limited|Fresenius Kabi USA LLC|FRESENIUS KABI
+s005,Granules India Ltd,Granules India,India,Hyderabad,17.38,78.49,API,false,22000000,2922.49,0.10,Qualified,19,47,medium,Granules India Limited|GRANULES INDIA LIMITED|Granules USA Inc
+s006,Aurobindo Pharma Ltd,Aurobindo,India,Hyderabad,17.39,78.49,API,false,37000000,2934.99,0.10,In Qualification,21,63,high,Aurobindo Pharma USA Inc|Aurobindo Pharma Limited|AUROBINDO PHARMA|Aurolife Pharma LLC
+s007,Dr. Reddy's Laboratories Ltd,Dr. Reddy's,India,Hyderabad,17.36,78.51,API,false,28000000,2934.99,0.10,Qualified,20,44,medium,Dr Reddys Laboratories Inc|Dr. Reddys Laboratories Inc|DR REDDYS LABORATORIES|Dr. Reddy's Laboratories Inc
+s008,Divi's Laboratories Ltd,Divi's Labs,India,Hyderabad,17.40,78.50,KSM,true,24000000,2934.10,0.10,None,26,76,high,Divis Laboratories Ltd|DIVI'S LABORATORIES|Divi Laboratories
+s009,Zhejiang Huahai Pharmaceutical Co.,Zhejiang Huahai,China,Linhai,28.85,121.13,API,false,41000000,2933.59,0.25,In Qualification,32,72,high,Zhejiang Huahai Pharmaceutical|Prinston Pharmaceutical Inc|Solco Healthcare LLC
+s010,CSPC Pharmaceutical Group Ltd,CSPC Pharma,China,Shijiazhuang,38.04,114.51,API,false,33000000,2922.49,0.25,Qualified,30,58,high,CSPC Pharmaceutical|CSPC OUYI Pharmaceutical|CSPC Innovation Pharmaceutical
+s011,Hisun Pharmaceuticals Co. Ltd,Hisun Pharma,China,Taizhou,28.66,121.42,API,false,18000000,2941.10,0.25,Qualified,28,49,medium,Hisun-Pfizer Pharmaceuticals|Zhejiang Hisun Pharmaceutical
+s012,WuXi Biologics Co. Ltd,WuXi Biologics,China,Wuxi,31.49,120.31,CMO,false,54000000,3002.15,0.25,Qualified,45,55,high,WuXi AppTec|Wuxi Biologics|WUXI BIOLOGICS
+s013,Jiangsu Hengrui Medicine Co. Ltd,Hengrui Medicine,China,Lianyungang,34.60,119.16,KSM,false,16000000,2933.99,0.25,In Qualification,33,43,medium,Hengrui Medicine|Jiangsu Hengrui|HENGRUI PHARMACEUTICAL
+s014,Lonza AG Visp,Lonza Visp,Switzerland,Visp,46.29,7.88,CMO,true,67000000,3002.13,0.03,None,42,71,high,Lonza Ltd|Lonza Group|LONZA AG
+s015,Lonza AG Basel,Lonza Basel,Switzerland,Basel,47.56,7.59,CMO,false,28000000,3002.13,0.03,Qualified,38,38,low,Lonza Biologics|Lonza Pharma
+s016,Siegfried AG Hameln,Siegfried Hameln,Germany,Hameln,52.10,9.36,CMO,false,22000000,2934.99,0.02,In Qualification,35,41,medium,Siegfried AG|Alfred E Tiefenbacher|SIEGFRIED
+s017,Almac Group Ltd Craigavon,Almac Group,United Kingdom,Craigavon,54.44,-6.38,CMO,false,31000000,3004.90,0.05,Qualified,35,46,medium,Almac Group|ALMAC GROUP LIMITED|Almac Sciences
+s018,Thermo Fisher Scientific Patheon,Patheon Durham,United States,Durham,35.99,-78.90,CMO,false,44000000,3004.90,0.00,Qualified,28,29,low,Patheon Inc|Thermo Fisher Scientific|PATHEON MANUFACTURING|DSM Pharmaceutical Products
+s019,Cambrex Corp High Point,Cambrex HP,United States,High Point,35.96,-80.01,API,false,19000000,2934.99,0.00,Qualified,21,31,low,Cambrex Corporation|CAMBREX CORP|Cambrex Charles City
+s020,BASF SE Ludwigshafen,BASF,Germany,Ludwigshafen,49.49,8.44,Excipient,false,11000000,3824.99,0.03,Qualified,25,22,low,BASF Corporation|BASF SE|BASF Pharma
+s021,Evonik Industries AG,Evonik,Germany,Essen,51.46,7.01,Excipient,false,8000000,3914.00,0.02,Qualified,22,18,low,Evonik Corporation|EVONIK INDUSTRIES|Rohm GmbH
+s022,Colorcon Ltd,Colorcon,United Kingdom,Dartford,51.45,0.22,Excipient,false,6000000,3912.11,0.05,Qualified,20,15,low,Colorcon Inc|COLORCON LIMITED|Colorcon Worldwide
+s023,West Pharmaceutical Services,West Pharma,United States,Exton,40.04,-75.62,Packaging,false,9000000,3923.50,0.00,Qualified,18,12,low,West Pharmaceutical Services Inc|WEST PHARMACEUTICAL
+s024,Pfizer CentreOne Kalamazoo,Pfizer C1,United States,Kalamazoo,42.29,-85.59,API,false,14000000,2941.10,0.00,Qualified,19,17,low,Pfizer Inc|Pfizer CentreOne|PFIZER MANUFACTURING
+s025,Wockhardt Ltd Mumbai,Wockhardt,India,Mumbai,19.08,72.88,API,false,12000000,2935.90,0.10,Qualified,23,36,low,Wockhardt Limited|WOCKHARDT LTD|Morton Grove Pharmaceuticals
