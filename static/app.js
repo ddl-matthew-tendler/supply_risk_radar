@@ -792,7 +792,8 @@ function WorldMapTab(props) {
         h(Divider, { orientation: 'left', plain: true }, 'Drug Products at Risk'),
         drawerSupplier.drugProducts && drawerSupplier.drugProducts.length > 0
           ? drawerSupplier.drugProducts.map(function(dpId) {
-              var dp = (typeof MOCK_DRUG_PRODUCTS !== 'undefined' ? MOCK_DRUG_PRODUCTS : []).find(function(d) { return d.id === dpId; });
+              var _dpSource = (window._REAL_DRUG_PRODUCTS && window._REAL_DRUG_PRODUCTS.length > 0) ? window._REAL_DRUG_PRODUCTS : (typeof MOCK_DRUG_PRODUCTS !== 'undefined' ? MOCK_DRUG_PRODUCTS : []);
+              var dp = _dpSource.find(function(d) { return d.id === dpId; });
               if (!dp) return null;
               return h('div', { key: dpId, style: { display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #F5F5F5', fontSize: 13 } },
                 h('div', null, h('div', { style: { fontWeight: 500 } }, dp.name), h('div', { style: { fontSize: 11, color: '#7F8385' } }, dp.therapyArea)),
@@ -1890,58 +1891,59 @@ function App() {
       fetch('/api/suppliers').then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
       fetch('/api/watchlist').then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
       fetch('/api/exec-brief').then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
+      fetch('/api/tariff-scenarios').then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
+      fetch('/api/drug-products').then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; }),
     ])
     .then(function(results) {
-      var alertsResp   = results[1];
+      var alertsResp    = results[1];
       var suppliersResp = results[2];
       var watchlistResp = results[3];
       var execBriefResp = results[4];
+      var tariffResp    = results[5];
+      var drugProdResp  = results[6];
       setConnected(true);
       setUseDummy(false);
 
-      // Suppliers: use real data if available, fall back to mock
+      // Suppliers
       if (suppliersResp && suppliersResp.source === 'real_data' && suppliersResp.suppliers && suppliersResp.suppliers.length > 0) {
         setSuppliers(suppliersResp.suppliers);
       } else if (typeof MOCK_SUPPLIERS !== 'undefined') {
         setSuppliers(MOCK_SUPPLIERS);
       }
 
-      // Watchlist: use real data if available, fall back to mock
+      // Watchlist
       if (watchlistResp && watchlistResp.source === 'real_data' && watchlistResp.watchlist && watchlistResp.watchlist.length > 0) {
         setWatchlist(watchlistResp.watchlist);
       } else if (typeof MOCK_WATCHLIST !== 'undefined') {
         setWatchlist(MOCK_WATCHLIST);
       }
 
-      // Exec brief: use real data if available, fall back to mock
+      // Exec brief
       if (execBriefResp && execBriefResp.source === 'real_data') {
         setExecBrief(execBriefResp);
       } else if (typeof MOCK_EXEC_BRIEF !== 'undefined') {
         setExecBrief(MOCK_EXEC_BRIEF);
       }
 
-      // Tariff scenarios: still mock until Phase D
-      if (typeof MOCK_TARIFF_SCENARIOS !== 'undefined') setTariffScenarios(MOCK_TARIFF_SCENARIOS);
+      // Tariff scenarios — real data from /api/tariff-scenarios
+      if (tariffResp && tariffResp.source === 'real_data' && tariffResp.scenarios && tariffResp.scenarios.length > 0) {
+        setTariffScenarios(tariffResp.scenarios);
+      } else if (typeof MOCK_TARIFF_SCENARIOS !== 'undefined') {
+        setTariffScenarios(MOCK_TARIFF_SCENARIOS);
+      }
 
-      // Alerts: use real Regulatory signals from the API, keep mock non-Regulatory types
-      // (Weather, Labor, Tariff, Environmental, Operational) until Phase D lands.
+      // Drug products — real data from /api/drug-products
+      if (drugProdResp && drugProdResp.source === 'real_data' && drugProdResp.drugProducts) {
+        window._REAL_DRUG_PRODUCTS = drugProdResp.drugProducts;
+      }
+
+      // Alerts — real data from all sources
       var realAlerts = alertsResp && alertsResp.alerts && alertsResp.alerts.length > 0
         ? alertsResp.alerts : null;
       if (realAlerts) {
-        // Check if real geo signals (Weather, Environmental, Tariff) are present.
-        // If yes, use only real alerts. If not, pad with mock non-Regulatory types
-        // (Labor, Geopolitical) until Phase E lands those feeds.
-        var realNonReg = realAlerts.filter(function(a) { return a.type !== 'Regulatory'; });
-        if (realNonReg.length > 0) {
-          setAlerts(realAlerts);
-        } else {
-          var mockNonReg = typeof MOCK_ALERTS !== 'undefined'
-            ? MOCK_ALERTS.filter(function(a) { return a.type !== 'Regulatory'; })
-            : [];
-          setAlerts(realAlerts.concat(mockNonReg));
-        }
-      } else {
-        if (typeof MOCK_ALERTS !== 'undefined') setAlerts(MOCK_ALERTS);
+        setAlerts(realAlerts);
+      } else if (typeof MOCK_ALERTS !== 'undefined') {
+        setAlerts(MOCK_ALERTS);
       }
       setLoading(false);
     })

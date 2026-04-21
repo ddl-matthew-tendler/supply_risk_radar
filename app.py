@@ -28,6 +28,8 @@ SRR_VOLUME_ROOT = Path(os.environ.get(
 SIGNALS_MATCHED   = SRR_VOLUME_ROOT / "signals_curated" / "openfda_matched.parquet"
 WL_MATCHED        = SRR_VOLUME_ROOT / "signals_curated" / "fda_warning_letters.parquet"
 GEO_SIGNALS       = SRR_VOLUME_ROOT / "signals_curated" / "geo_signals.parquet"
+TARIFF_SIGNALS    = SRR_VOLUME_ROOT / "signals_curated" / "tariff_signals.parquet"
+OFAC_SIGNALS      = SRR_VOLUME_ROOT / "signals_curated" / "ofac_signals.parquet"
 OPENFDA_WATERMARK = SRR_VOLUME_ROOT / "state" / "openfda_watermark.json"
 
 app = FastAPI()
@@ -181,7 +183,7 @@ def _build_real_suppliers() -> list[dict] | None:
     cutoff90 = datetime.now(timezone.utc) - timedelta(days=90)
     sig_bumps: dict[str, int] = {}
     sig_events: dict[str, list[str]] = {}
-    for path in (SIGNALS_MATCHED, WL_MATCHED, GEO_SIGNALS):
+    for path in (SIGNALS_MATCHED, WL_MATCHED, GEO_SIGNALS, TARIFF_SIGNALS):
         if not path.exists():
             continue
         try:
@@ -587,6 +589,37 @@ def get_alerts(since_days: int = 180):
         except Exception as e:
             print(f"[alerts-read-error] geo_signals: {e}")
 
+    # Tariff signals
+    if TARIFF_SIGNALS.exists():
+        try:
+            tdf = pd.read_parquet(TARIFF_SIGNALS)
+            if not tdf.empty:
+                tdf["event_date"] = pd.to_datetime(tdf["event_date"], errors="coerce", utc=True)
+                tdf = tdf[tdf["supplier_id"].notna()]
+                for _, row in tdf.iterrows():
+                    alert = _geo_signal_to_alert(row.to_dict())
+                    if alert:
+                        all_alerts.append(alert)
+                sources_used.append("us_tariff_schedule")
+        except Exception as e:
+            print(f"[alerts-read-error] tariff_signals: {e}")
+
+    # OFAC sanctions screening — only surface matches (not 'clear' rows)
+    if OFAC_SIGNALS.exists():
+        try:
+            odf = pd.read_parquet(OFAC_SIGNALS)
+            if not odf.empty:
+                odf = odf[odf["severity"] == "critical"]  # only actual matches
+                odf = odf[odf["supplier_id"].notna()]
+                for _, row in odf.iterrows():
+                    alert = _geo_signal_to_alert(row.to_dict())
+                    if alert:
+                        all_alerts.append(alert)
+                if not odf.empty:
+                    sources_used.append("ofac_sdn")
+        except Exception as e:
+            print(f"[alerts-read-error] ofac_signals: {e}")
+
     sev_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
     all_alerts.sort(
         key=lambda a: (
@@ -603,9 +636,76 @@ def get_alerts(since_days: int = 180):
     }
 
 
+@app.get("/api/drug-products")
+def get_drug_products():
+    """Return drug product list from drug_products.csv."""
+    dp_csv = Path(__file__).parent / "data" / "drug_products.csv"
+    if pd is None or not dp_csv.exists():
+        return JSONResponse(content={"drugProducts": [], "source": "no_data"})
+    try:
+        df = pd.read_csv(dp_csv, dtype=str).fillna("")
+        products = []
+        for _, row in df.iterrows():
+            sole_ids = [s.strip() for s in str(row.get("sole_supplier_ids", "")).split("|") if s.strip()]
+            all_ids  = [s.strip() for s in str(row.get("all_supplier_ids", "")).split("|") if s.strip()]
+            products.append({
+                "id":           row["drug_id"],
+                "name":         row["name"],
+                "inn":          row.get("inn", ""),
+                "revenue":      int(float(row.get("revenue") or 0)),
+                "therapyArea":  row.get("therapy_area", ""),
+                "dosageForm":   row.get("dosage_form", ""),
+                "stage":        row.get("stage", ""),
+                "soleSupplierIds": sole_ids,
+                "allSupplierIds":  all_ids,
+            })
+        return JSONResponse(content={"drugProducts": products, "source": "real_data", "count": len(products)})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
 @app.get("/api/tariff-scenarios")
 def get_tariff_scenarios():
-    return JSONResponse(content=_load_mock("tariff_scenarios"))
+    """Return real tariff scenarios derived from tariff_signals.parquet."""
+    if pd is None or not TARIFF_SIGNALS.exists():
+        return JSONResponse(content={"scenarios": [], "source": "no_data"})
+    try:
+        df = pd.read_parquet(TARIFF_SIGNALS)
+        if df.empty:
+            return JSONResponse(content={"scenarios": [], "source": "no_data"})
+
+        # Aggregate by country for scenario view
+        scenarios = []
+        for country, grp in df.groupby("country"):
+            total_spend = grp["magnitude"].apply(lambda _: 0).sum()  # magnitude=rate
+            # Re-read spend from suppliers_master
+            sup_csv = Path(__file__).parent / "data" / "suppliers_master.csv"
+            if sup_csv.exists():
+                sdf = pd.read_csv(sup_csv, dtype=str).fillna("")
+                country_spend = sdf[sdf["country"] == country]["spend"].astype(float).sum()
+            else:
+                country_spend = 0
+            first = grp.iloc[0]
+            rate = float(first.get("magnitude", 0))
+            severity = str(first.get("severity", "medium"))
+            classification = str(first.get("classification", ""))
+            scenarios.append({
+                "country":       country,
+                "tariffRate":    rate,
+                "classification": classification,
+                "severity":      severity,
+                "totalSpend":    int(country_spend),
+                "estimatedImpact": int(country_spend * rate / 100),
+                "supplierCount": len(grp),
+                "description":   str(first.get("description", ""))[:300],
+                "sourceUrl":     str(first.get("source_url", "")),
+                "effectiveDate": str(first.get("event_date", ""))[:10],
+            })
+        scenarios.sort(key=lambda s: -s["estimatedImpact"])
+        return JSONResponse(content={"scenarios": scenarios, "source": "real_data", "count": len(scenarios)})
+    except Exception as e:
+        print(f"[tariff-scenarios] {e}")
+        return JSONResponse(content={"scenarios": [], "source": "error", "error": str(e)})
 
 
 @app.get("/api/exec-brief")
@@ -875,17 +975,39 @@ def _run_geo_ingest_once() -> None:
         print(f"[geo-ingest-error] {e}")
 
 
+def _run_tariff_ingest_once() -> None:
+    try:
+        from jobs import ingest_tariff_signals
+        ingest_tariff_signals.main()
+    except Exception as e:
+        print(f"[tariff-ingest-error] {e}")
+
+
+def _run_ofac_ingest_once() -> None:
+    try:
+        from jobs import ingest_ofac
+        ingest_ofac.main()
+    except Exception as e:
+        print(f"[ofac-ingest-error] {e}")
+
+
 def _ingest_scheduler() -> None:
     """Run all ingest jobs on boot, then on staggered schedules. Survives failures.
 
     FDA enforcement + WL: every 24h (data updates ~daily)
     Geo signals (USGS, weather, FX): every 6h (weather/FX refresh frequently)
+    Tariff signals: every 24h (tariff schedule rarely changes)
+    OFAC SDN: every 24h (OFAC updates ~daily)
     """
     time.sleep(15)  # let the app finish booting
-    geo_interval  = 6  * 60 * 60   # 6 hours
-    fda_interval  = 24 * 60 * 60   # 24 hours
-    last_geo = 0.0
-    last_fda = 0.0
+    geo_interval    = 6  * 60 * 60   # 6 hours
+    fda_interval    = 24 * 60 * 60   # 24 hours
+    tariff_interval = 24 * 60 * 60   # 24 hours
+    ofac_interval   = 24 * 60 * 60   # 24 hours
+    last_geo     = 0.0
+    last_fda     = 0.0
+    last_tariff  = 0.0
+    last_ofac    = 0.0
     while True:
         now = time.time()
         if now - last_fda >= fda_interval:
@@ -897,6 +1019,12 @@ def _ingest_scheduler() -> None:
         if now - last_geo >= geo_interval:
             _run_geo_ingest_once()
             last_geo = time.time()
+        if now - last_tariff >= tariff_interval:
+            _run_tariff_ingest_once()
+            last_tariff = time.time()
+        if now - last_ofac >= ofac_interval:
+            _run_ofac_ingest_once()
+            last_ofac = time.time()
         time.sleep(60)  # check every minute
 
 
@@ -907,7 +1035,7 @@ def _start_scheduler():
         return
     t = threading.Thread(target=_ingest_scheduler, daemon=True, name="ingest-scheduler")
     t.start()
-    print("[ingest] background scheduler started (FDA: 24h, geo: 6h)")
+    print("[ingest] background scheduler started (FDA: 24h, geo: 6h, tariff: 24h, OFAC: 24h)")
 
 
 @app.post("/api/signals/openfda/ingest")
