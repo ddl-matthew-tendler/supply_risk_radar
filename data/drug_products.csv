@@ -1,0 +1,11 @@
+drug_id,name,inn,revenue,therapy_area,dosage_form,stage,sole_supplier_ids,all_supplier_ids
+dp001,Imatinib Mesylate 400mg Tabs,imatinib,310000000,Oncology (CML/GIST),Oral Tablet,Commercial,s003,s001|s002|s003
+dp002,Docetaxel 80mg/4mL Concentrate,docetaxel,255000000,Oncology (Breast/Prostate),IV Infusion,Commercial,s004,s004|s006
+dp003,Amlodipine Besylate 10mg Tabs,amlodipine,198000000,Cardiovascular,Oral Tablet,Commercial,,s006|s007|s010
+dp004,Metformin HCl 500mg ER Tabs,metformin,182000000,Diabetes,Oral Tablet,Commercial,,s005|s010|s011
+dp005,Montelukast Sodium 10mg Tabs,montelukast,163000000,Respiratory,Oral Tablet,Commercial,s008,s007|s008
+dp006,Adalimumab 40mg/0.4mL SC Inj (biosimilar),adalimumab,448000000,Immunology,SC Injection,Commercial,s014,s012|s014
+dp007,Trastuzumab 440mg IV Infusion (biosimilar),trastuzumab,318000000,Oncology (Breast/Gastric),IV Infusion,Commercial,,s012|s015
+dp008,Azithromycin 250mg Caps,azithromycin,141000000,Anti-infective,Oral Capsule,Commercial,,s009|s010|s011
+dp009,Lenalidomide 25mg Caps,lenalidomide,287000000,Hematology Oncology,Oral Capsule,Commercial,s003,s001|s003
+dp010,Dolutegravir 50mg Tabs,dolutegravir,214000000,Antiviral (HIV),Oral Tablet,Commercial,s006,s006|s008

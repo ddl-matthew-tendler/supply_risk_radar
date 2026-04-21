@@ -340,33 +340,51 @@ def normalize_warning_letters(letters: list[dict]) -> pd.DataFrame:
 
 # ── Supplier matching ────────────────────────────────────────────────────────
 def load_suppliers_master() -> pd.DataFrame:
-    """Suppliers live at signals_curated/suppliers_master.parquet.
+    """Load the supplier master, in priority order:
 
-    For first-run bootstrapping, fall back to the app's mock_data.js so this
-    job is self-sufficient until Phase 1.1 lands.
+    1. signals_curated/suppliers_master.parquet on the NetApp volume (production)
+    2. data/suppliers_master.csv in the code repo (checked-in real data, Phase B)
+    3. mock_data.js regex parse (legacy bootstrap, will be removed in Phase C)
     """
+    # 1. Volume parquet
     master = CURATED_ROOT / "suppliers_master.parquet"
     if master.exists():
-        return pd.read_parquet(master)
+        df = pd.read_parquet(master)
+        _log(f"loaded {len(df)} suppliers from volume parquet")
+        return df
 
-    # Bootstrap fallback: read the 25 seeded sites from mock_data.js
+    # 2. CSV in code repo (real supplier master, Phase B)
+    csv_path = Path(__file__).resolve().parent.parent / "data" / "suppliers_master.csv"
+    if csv_path.exists():
+        df = pd.read_csv(csv_path, dtype=str).fillna("")
+        # Persist to volume so subsequent runs use the faster parquet path
+        try:
+            CURATED_ROOT.mkdir(parents=True, exist_ok=True)
+            df.to_parquet(master, index=False)
+            _log(f"promoted {len(df)} suppliers from CSV to volume parquet")
+        except Exception as e:
+            _log(f"could not promote CSV to parquet (volume may be RO): {e}")
+        _log(f"loaded {len(df)} suppliers from data/suppliers_master.csv")
+        return df
+
+    # 3. Legacy: parse mock_data.js
     mock_js = Path(__file__).resolve().parent.parent / "static" / "mock_data.js"
     if not mock_js.exists():
-        _log("no suppliers_master.parquet and no mock_data.js fallback found")
+        _log("no supplier source found — returning empty frame")
         return pd.DataFrame(columns=["supplier_id", "name", "city", "country"])
 
     import re
     text = mock_js.read_text()
-    # Extract the MOCK_SUPPLIERS array blob and parse id/name/city/country via regex
     pattern = re.compile(
         r"id:\s*'([^']+)'.*?name:\s*'([^']+)'.*?country:\s*'([^']+)'.*?city:\s*'([^']+)'",
         re.DOTALL,
     )
-    rows = []
-    for m in pattern.finditer(text):
-        rows.append({"supplier_id": m.group(1), "name": m.group(2), "country": m.group(3), "city": m.group(4)})
+    rows = [
+        {"supplier_id": m.group(1), "name": m.group(2), "country": m.group(3), "city": m.group(4)}
+        for m in pattern.finditer(text)
+    ]
     df = pd.DataFrame(rows)
-    _log(f"bootstrapped {len(df)} suppliers from mock_data.js")
+    _log(f"bootstrapped {len(df)} suppliers from mock_data.js (legacy)")
     return df
 
 

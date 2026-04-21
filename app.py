@@ -68,44 +68,65 @@ def _read_jsonl(path: Path) -> list:
     return out
 
 
-# ── Alert ETL: supplier/drug lookup + signal → alert schema ──────────────────
-# Seeded from the demo supplier master in mock_data.js; replaced by
-# suppliers_master.parquet in Phase B.
-_SUPPLIER_NAMES: dict[str, str] = {
-    "s001": "Aurobindo Pharma Unit VII",
-    "s002": "Zhejiang Huahai Pharmaceutical",
-    "s003": "Divi's Laboratories Unit II",
-    "s004": "Hisun Pharmaceuticals",
-    "s005": "Laurus Labs API Unit",
-    "s006": "Sun Pharmaceutical Ind. Ltd",
-    "s007": "Jiangsu Hengrui Medicine",
-    "s008": "Almac Group Ltd",
-    "s009": "Lonza AG Visp Site",
-    "s010": "Boehringer Ingelheim BioXcellence",
-    "s011": "Siegfried AG Hameln",
-    "s012": "Cambrex Corp High Point",
-    "s013": "Dr. Reddy's Laboratories CPS",
-}
-
-_SUPPLIER_DRUG_IMPACT: dict[str, list[str]] = {
-    "s001": ["Vexorin (dp001) – sole KSM source, $2.1B revenue", "Cardivance (dp002) – $1.45B revenue"],
-    "s002": ["Lumizap (dp003) – primary API source, $890M revenue"],
-    "s003": ["Vexorin (dp001) – KSM source, $2.1B revenue", "Renolyx (dp004) – $670M revenue"],
-    "s004": ["Axitrel (dp005) – $540M revenue"],
-    "s005": ["Nevrex (dp006) – sole API source, $420M revenue, zero alternates"],
-    "s006": ["Cardivance (dp002) – $1.45B revenue", "Inflameze (dp007) – $310M revenue"],
-    "s007": ["Lumizap (dp003) – $890M revenue", "Axitrel (dp005) – $540M revenue"],
-    "s008": ["Coatrix DP (dp008) – $280M revenue"],
-    "s009": ["Biorexin (dp009) – sole CMO source, $750M revenue"],
-    "s010": ["Zeltavir (dp010) – $195M revenue"],
-}
-
+# ── Alert ETL: supplier/drug lookup built from data/suppliers_master.csv ──────
 _CLASSIFICATION_SEVERITY: dict[str, str] = {
     "Class I": "critical",
     "Class II": "high",
     "Class III": "medium",
     "Warning Letter": "critical",
 }
+
+
+def _load_supplier_lookup() -> tuple[dict[str, str], dict[str, list[str]]]:
+    """Build supplier name and drug impact dicts from the checked-in CSVs.
+
+    Priority: volume parquet > data/*.csv > empty dicts (graceful degradation).
+    Called once at startup; result is cached in module-level vars below.
+    """
+    names: dict[str, str] = {}
+    drug_impact: dict[str, list[str]] = {}
+
+    # Load suppliers
+    sup_parquet = SRR_VOLUME_ROOT / "signals_curated" / "suppliers_master.parquet"
+    sup_csv = Path(__file__).parent / "data" / "suppliers_master.csv"
+    sup_df = None
+    if pd is not None:
+        if sup_parquet.exists():
+            try:
+                sup_df = pd.read_parquet(sup_parquet)
+            except Exception:
+                pass
+        if sup_df is None and sup_csv.exists():
+            try:
+                sup_df = pd.read_csv(sup_csv, dtype=str).fillna("")
+            except Exception:
+                pass
+    if sup_df is not None:
+        for _, row in sup_df.iterrows():
+            names[row["supplier_id"]] = row["name"]
+
+    # Load drug products and build supplier → [drug impact strings]
+    dp_csv = Path(__file__).parent / "data" / "drug_products.csv"
+    if pd is not None and dp_csv.exists():
+        try:
+            dp_df = pd.read_csv(dp_csv, dtype=str).fillna("")
+            for _, row in dp_df.iterrows():
+                revenue = int(row["revenue"]) if row.get("revenue") else 0
+                rev_str = f"${revenue / 1e6:.0f}M revenue" if revenue else ""
+                name = row["name"]
+                sole_ids = [s.strip() for s in row.get("sole_supplier_ids", "").split("|") if s.strip()]
+                all_ids = [s.strip() for s in row.get("all_supplier_ids", "").split("|") if s.strip()]
+                for sid in all_ids:
+                    sole_flag = " – sole source" if sid in sole_ids else ""
+                    impact = f"{name}{sole_flag}, {rev_str}".strip(", ")
+                    drug_impact.setdefault(sid, []).append(impact)
+        except Exception as e:
+            print(f"[lookup-load] drug_products.csv error: {e}")
+
+    return names, drug_impact
+
+
+_SUPPLIER_NAMES, _SUPPLIER_DRUG_IMPACT = _load_supplier_lookup()
 
 
 def _signal_to_alert(row: dict) -> dict | None:
