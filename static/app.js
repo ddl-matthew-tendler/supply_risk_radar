@@ -1913,7 +1913,6 @@ function App() {
     })
     .catch(function() {
       setConnected(false);
-      setUseDummy(true);
       loadMockData();
     });
   }
@@ -2024,10 +2023,10 @@ function App() {
             ),
             h('div', { className: 'search-card-right' },
               h('div', { style: { fontSize: 12, color: '#65657B' } }, suppliers.length + ' suppliers monitored'),
-              !connected ? h('div', { className: 'dummy-data-toggle', style: { color: '#65657B' } },
+              h('div', { className: 'dummy-data-toggle', style: { color: '#65657B' } },
                 h('span', null, 'Dummy data'),
                 h(Switch, { checked: useDummy, onChange: handleToggle, size: 'small' })
-              ) : null,
+              ),
               h(Button, { size: 'small', onClick: function() { setAboutOpen(true); } }, 'About')
             )
           )
